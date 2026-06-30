@@ -1,5 +1,6 @@
 ---
 name: merge-pr
+license: MIT
 description: Use when a PR has been reviewed, approved, and is ready to merge. Calls /pr-ready first — refuses to merge if BLOCKED. On green, prompts merge method (merge/squash/rebase) and runs gh pr merge. Triggers - "/merge-pr", "merge it", "click the merge button", "ship the PR".
 disable-model-invocation: true
 ---
@@ -30,7 +31,7 @@ resolve PR → /pr-ready (verify) → pick merge method → HITL approve → gh 
 
 ### 2. Verify mergeability
 
-Invoke `/pr-ready <number>` (or run `bash ~/.claude/lib/pr-checks.sh <number>` directly).
+Invoke `/pr-ready <number>` (or run `bash scripts/pr-checks.sh <number>` directly).
 
 - JSON `.ready == true` → continue.
 - Otherwise → print the BLOCKED checklist verbatim + halt. Don't ask "merge anyway?" — strict-PR repos never bypass.

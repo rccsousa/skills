@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# install.sh — symlink these skills + lib into ~/.claude so Claude Code finds them.
+# install.sh — symlink these skills into ~/.claude so Claude Code finds them.
+#
+# Each skill is self-contained: its shared helpers are vendored under
+# skills/<name>/scripts and skills/<name>/references (see vendor-skills.sh), so
+# only skills/ needs to be linked — there is no ~/.claude/lib/ dependency.
 #
 # Safe to re-run. Existing files are NOT overwritten — conflicts are reported
 # and skipped so your own local skills are never clobbered. Remove a conflicting
@@ -12,7 +16,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="${CLAUDE_HOME:-$HOME/.claude}"
 
-mkdir -p "$DEST/skills" "$DEST/lib"
+mkdir -p "$DEST/skills"
 
 link() {  # $1 = source, $2 = target
   local src="$1" tgt="$2"
@@ -30,11 +34,6 @@ echo "→ skills"
 for d in "$REPO"/skills/*/; do
   d="${d%/}"
   link "$d" "$DEST/skills/$(basename "$d")"
-done
-
-echo "→ lib"
-for f in "$REPO"/lib/*; do
-  link "$f" "$DEST/lib/$(basename "$f")"
 done
 
 echo "→ done. Restart Claude Code or reload skills to pick them up."

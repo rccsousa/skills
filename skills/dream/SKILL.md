@@ -1,5 +1,6 @@
 ---
 name: dream
+license: MIT
 description: Use when the user says /dream or asks to consolidate, clean up, or review memories — performs a full memory consolidation pass as a background subagent
 user-invocable: false
 ---

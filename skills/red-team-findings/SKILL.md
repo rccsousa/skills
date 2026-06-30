@@ -1,5 +1,6 @@
 ---
 name: red-team-findings
+license: MIT
 description: Hand a verified set of audit findings to one fresh, independent opus agent whose only job is to REFUTE them — prove false-positive, wrong-severity, or unreachable — then hunt what the audit missed and challenge its "verified clean" claims. A second adversarial layer after self-verification, because confirmation bias survives first-party tracing. Use as the red-team gate inside deep-audit (step 4.5), or standalone before sending any high-stakes findings out. Triggers - "/red-team-findings", "red-team this audit", "adversarial pass on these findings", "try to break my findings".
 disable-model-invocation: true
 ---

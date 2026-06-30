@@ -1,5 +1,6 @@
 ---
 name: council-of-agents
+license: MIT
 description: Parallel multi-lens planning. Dispatch N subagents, each with one lens (architecture, UX, security, domain, ops, persistence, test). Synthesize into a unified design brief that feeds writing-plans. Use before plans when scope is fuzzy or multi-stakeholder.
 user-invocable: false
 ---

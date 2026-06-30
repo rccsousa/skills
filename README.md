@@ -6,10 +6,23 @@ and Claude Code picks them up.
 
 ## Install
 
+Each skill is **self-contained** — its helper scripts and policy docs are
+vendored inside the skill folder — so you can install one, some, or all of them.
+
+**Per-skill, via the [`skills`](https://github.com/vercel-labs/skills) CLI:**
+
 ```bash
-git clone https://github.com/<you>/claude-skills.git
-cd claude-skills
-./install.sh            # symlinks skills/ + lib/ into ~/.claude
+npx skills add rccsousa/skills              # pick interactively
+npx skills add rccsousa/skills --skill pr-ready
+npx skills add rccsousa/skills --all        # every skill
+```
+
+**Whole set, via symlink:**
+
+```bash
+git clone https://github.com/rccsousa/skills.git
+cd skills
+./install.sh            # symlinks skills/ into ~/.claude
 ```
 
 Re-running `install.sh` is safe — it never overwrites existing non-symlink files.
@@ -47,7 +60,6 @@ skill.
 |-------|--------------|
 | `housekeeping` | Prune stale worktrees, delete plan files for merged PRs, tidy after a task. |
 | `sync-worktree-skills` | Symlink project `.claude/skills/` into a fresh `git worktree`. |
-| `find-skills` | Discover which skill fits a task. |
 | `pending` | Track pending todos across sessions in a checkbox memory file. |
 | `dream` | Consolidate / clean up / review memories. |
 
@@ -61,7 +73,12 @@ skill.
 ## Shared scripts (`lib/`)
 
 Deterministic helpers the skills shell out to (kept out of the prompt so the
-logic is testable and the marker tables have a single source of truth):
+logic is testable and the marker tables have a single source of truth).
+
+`lib/` is the **canonical source**. `vendor-skills.sh` fans these files out into
+each skill that uses them (`skills/<name>/scripts/` for `.sh`, `references/` for
+`.md`) so every skill is self-contained for a standalone `npx skills` install.
+Edit `lib/` and re-run `vendor-skills.sh` — never hand-edit the vendored copies.
 
 - `classify-review-severity.sh` — pluggable severity classifier for review bots (CodeRabbit reference adapter + `generic` fallback).
 - `fetch-review-threads.sh` — single GraphQL fetch of a PR's reviews + threads.

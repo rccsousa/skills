@@ -1,5 +1,6 @@
 ---
 name: pending
+license: MIT
 description: Track and surface pending todo items across sessions via a checkbox-tracked memory file. Triggers - "/pending", "what's pending", "what do I need to do", "cross X off", "mark X done", "add X to pending".
 ---
 

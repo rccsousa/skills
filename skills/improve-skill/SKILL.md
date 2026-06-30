@@ -1,5 +1,6 @@
 ---
 name: improve-skill
+license: MIT
 description: Review the back-and-forth that just followed a skill invocation and propose enhancements to that skill so the same friction is handled automatically next time. Use when the user says "/improve-skill", "make the skill handle this", "fold this into the skill", or after a skill session wraps and the user wants a retro.
 user-invocable: false
 ---

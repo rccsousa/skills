@@ -1,5 +1,6 @@
 ---
 name: catch-up-main
+license: MIT
 description: Use when a feature branch has diverged from main and needs to absorb new upstream changes (conflicts after a sibling PR merged, CI complaining about "not up to date", reviewer asks to sync). Chooses merge vs rebase, resolves conflicts with take-ours-for-superset defaults, verifies typecheck+tests, lax commit+push.
 disable-model-invocation: true
 ---
@@ -23,7 +24,7 @@ Any variant of: "rebase this onto main", "merge main in", "fix conflicts w/ main
 ## Single-branch flow
 
 1. `git fetch origin`
-2. Apply `~/.claude/lib/catch-up-shared.md` against `target = origin/main` — decision script, merge/rebase flow, verify, commit + push (lax).
+2. Apply `references/catch-up-shared.md` against `target = origin/main` — decision script, merge/rebase flow, verify, commit + push (lax).
 
 That's it. Shared file owns the engine.
 

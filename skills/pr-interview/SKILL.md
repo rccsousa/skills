@@ -1,5 +1,6 @@
 ---
 name: pr-interview
+license: MIT
 description: Use before pushing/merging a PR to verify the author understands the diff. Auto-fires from /create-pr Step 4.5, or invoke directly. Picks 3 hunks (1 largest + 2 risk-keyword), asks plain-English explain + edge-case + scope + drift questions. Soft signal, not gate. Triggers - "/pr-interview", "interview me on this PR", "quiz me before push".
 ---
 
@@ -44,7 +45,7 @@ dels, churn, keywords}` sorted by churn desc (keyword families baked in,
 single source of truth):
 
 ```bash
-gh pr diff <num> | ~/.claude/lib/extract-interview-hunks.sh   # or: git diff origin/<base>..HEAD | ...
+gh pr diff <num> | scripts/extract-interview-hunks.sh   # or: git diff origin/<base>..HEAD | ...
 ```
 
 Then SELECT (this is the judgement, not the script's job):

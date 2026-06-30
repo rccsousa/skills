@@ -1,5 +1,6 @@
 ---
 name: audit-skills
+license: MIT
 description: Audit Claude skills for visibility flags, deterministic-vs-AI steps, and cross-skill duplication. Use when user says "/audit-skills", "review my skills", "skill audit", or after adding new skills.
 ---
 
@@ -56,7 +57,7 @@ Pattern: extract into `<skill>/lib/<name>.sh` (or `.ts` if heavy). Skill body in
 ### 3. Cross-skill duplication
 
 Find pairs/groups with overlapping logic. Extract into either:
-- **Shared script** in a common location (`~/.claude/lib/` or `<project>/.claude/lib/`)
+- **Shared script** in a common location (a repo-level `lib/`, or a project `.claude/lib/`)
 - **Smaller composable skill** that other skills reference
 
 Common dup patterns to scan for:

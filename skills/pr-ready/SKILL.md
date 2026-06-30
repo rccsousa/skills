@@ -1,5 +1,6 @@
 ---
 name: pr-ready
+license: MIT
 description: Verify a PR is in a mergeable state (CI green, no unresolved threads, conventional commits, not draft). Reports state — does NOT merge. Use /merge-pr to actually merge. Triggers - "/pr-ready", "is this ready?", "is this mergeable?", or after any agent claims work is "done"/"ready"/"good to go".
 ---
 
@@ -25,11 +26,11 @@ Two-step: produce the mergeability report, then verify with live commands. No cl
    - Title, base, +adds/-dels, commit count, issue tracker ID
    - One-line "what shipped" (from PR body or commit titles)
 
-3. **Verify** — `bash ~/.claude/lib/pr-checks.sh <n>` → JSON report
+3. **Verify** — `bash scripts/pr-checks.sh <n>` → JSON report
    - Parse: each of `{ci, merge, review, size, commits, draft}` has `.ok` boolean
    - On `review.unresolved_threads > 0` → fetch thread detail:
      ```bash
-     ~/.claude/lib/fetch-review-threads.sh <n>   # → .threads[] {path, line, isResolved, comments}
+     scripts/fetch-review-threads.sh <n>   # → .threads[] {path, line, isResolved, comments}
      ```
      Filter to `isResolved == false` for the unresolved list.
    - Script reads `origin/<base>`; if base not fetched, run `git fetch origin <base>` first

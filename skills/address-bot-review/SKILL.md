@@ -1,5 +1,6 @@
 ---
 name: address-bot-review
+license: MIT
 description: Use when asked to fix/address automated review-bot comments on a PR (CodeRabbit, or any bot via --bot). Fetches findings, fixes Critical/Major only (skips nits unless trivial), commits, pushes, replies to each thread, and resolves them on GitHub.
 disable-model-invocation: true
 ---
@@ -28,7 +29,7 @@ If no number is provided, ask for one.
 
 ```bash
 gh pr view <num> --json headRefName,baseRefName,headRepositoryOwner,state,url
-~/.claude/lib/fetch-review-threads.sh <num>   # reviews + threads (id, databaseId, isResolved, isOutdated, path, line)
+scripts/fetch-review-threads.sh <num>   # reviews + threads (id, databaseId, isResolved, isOutdated, path, line)
 ```
 
 The fetcher returns ALL threads. Only consider comments authored by the target
@@ -42,7 +43,7 @@ Pipe each thread's first comment body through the shared classifier — it
 emits the raw severity token (single source of marker truth):
 
 ```bash
-echo "$body" | ~/.claude/lib/classify-review-severity.sh --bot <coderabbit|generic>
+echo "$body" | scripts/classify-review-severity.sh --bot <coderabbit|generic>
 # → {"severity":"critical|major|minor|nit|refactor|verification|unknown", "marker":"...", "bot":"..."}
 ```
 
@@ -89,7 +90,7 @@ Do not run the full test suite unless the findings touched logic.
 
 ### 6. Commit + push
 
-**Mode: lax** (see `~/.claude/lib/commit-push-policy.md`). One commit per logical fix (or one squashed commit if all findings are in same file). One-liner message per the policy. Push to PR branch. On non-fast-forward reject → STOP and ask; never force-push.
+**Mode: lax** (see `references/commit-push-policy.md`). One commit per logical fix (or one squashed commit if all findings are in same file). One-liner message per the policy. Push to PR branch. On non-fast-forward reject → STOP and ask; never force-push.
 
 ### 7. Reply + resolve each thread
 

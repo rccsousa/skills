@@ -1,5 +1,6 @@
 ---
 name: sync-worktree-skills
+license: MIT
 description: Use after `git worktree add` to symlink project `.claude/skills/` (and optionally plans/specs) from the main checkout into the new worktree. Project `.claude/` stays untracked by design, so worktrees miss skills by default. Triggers - "/sync-worktree-skills", "skills missing in worktree", "after git worktree add".
 disable-model-invocation: true
 ---
@@ -44,7 +45,7 @@ Never symlink:
 ### 1. Detect main checkout
 
 ```bash
-~/.claude/lib/get-worktree-info.sh   # → {mainPath, worktrees:[{name,path,branch,isMain}]}
+scripts/get-worktree-info.sh   # → {mainPath, worktrees:[{name,path,branch,isMain}]}
 ```
 
 `.mainPath` is the symlink source root. Shared primitive (also used by

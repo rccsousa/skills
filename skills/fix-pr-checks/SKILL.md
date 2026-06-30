@@ -1,5 +1,6 @@
 ---
 name: fix-pr-checks
+license: MIT
 description: Diagnose and fix failing CI checks on a PR (lint/format/type/test). Triggers - "/fix-pr-checks", "checks are failing", "fix the PR checks", "CI is red on <PR#>". Finds the real failure, fixes only files in your diff, verifies locally before pushing.
 disable-model-invocation: true
 ---

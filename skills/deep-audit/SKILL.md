@@ -1,5 +1,6 @@
 ---
 name: deep-audit
+license: MIT
 description: Audit someone else's branch/PR as an external reviewer — read-only, report-not-fix posture, with a mandatory verification gate so only proven findings reach the client/team. Drives the full loop - scope & cluster the diff, fan out parallel reviewers, collate, verify each finding against source + runtime, reconcile a local report, and optionally emit a ready-to-fire script that posts the verified findings as inline PR review comments. Use when reviewing code you do NOT own or contribute to, when hired to audit, or when credibility of findings is the deliverable. Triggers - "/deep-audit", "audit this branch/PR", "review as an external auditor", "we're guarding not contributing".
 disable-model-invocation: true
 ---

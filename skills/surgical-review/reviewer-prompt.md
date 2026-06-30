@@ -87,7 +87,7 @@ git diff {BASE_SHA}..{HEAD_SHA}
 
 ## Output Format + Hard Rules
 
-Apply the shared **review output contract** at `~/.claude/lib/review-output-contract.md` — severity definitions, DO/DON'T rules, verdict format, output skeleton. The checklist above is the lens; the contract is the format.
+Apply the shared **review output contract** at `references/review-output-contract.md` — severity definitions, DO/DON'T rules, verdict format, output skeleton. The checklist above is the lens; the contract is the format.
 
 ---
 

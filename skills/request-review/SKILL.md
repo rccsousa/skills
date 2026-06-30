@@ -1,5 +1,6 @@
 ---
 name: request-review
+license: MIT
 description: Use when transitioning a PR from draft to ready-for-review (or about to ping colleagues). Verifies the review bot has reviewed AND that Critical/Major findings are addressed. Soft signal, not hard gate — surfaces report + HITL approve before flipping draft to ready. Triggers - "/request-review", "ready for team review", "ping the team", "is the bot done?", "mark ready for review".
 disable-model-invocation: true
 ---
@@ -54,7 +55,7 @@ Skip with surfaced reason if:
 ### 2. Fetch bot state
 
 ```bash
-~/.claude/lib/fetch-review-threads.sh <pr>   # → {reviews:[...], threads:[...]}
+scripts/fetch-review-threads.sh <pr>   # → {reviews:[...], threads:[...]}
 ```
 
 Use `.reviews` for 3a (has the bot reviewed?) and `.threads` for 3b (severity).
@@ -81,7 +82,7 @@ Classify each first comment body via the shared classifier (single source
 of marker truth):
 
 ```bash
-echo "$body" | ~/.claude/lib/classify-review-severity.sh --bot <coderabbit|generic>
+echo "$body" | scripts/classify-review-severity.sh --bot <coderabbit|generic>
 # → {"severity":"critical|major|minor|nit|refactor|verification|unknown", "marker":"...", "bot":"..."}
 ```
 

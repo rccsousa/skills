@@ -1,5 +1,6 @@
 ---
 name: verify-review-findings
+license: MIT
 description: Adversarially verify code-review findings against source + runtime BEFORE presenting them with a severity. Each finding is traced to code and empirically checked; unproven ones are downgraded or refuted. Use after any review that fanned out subagents, before sending findings to a client/team/PR, or whenever a finding's severity is reviewer judgement not proven fact. Triggers - "/verify-review-findings", "verify these findings", "are these findings real?", "check before I post".
 disable-model-invocation: true
 ---

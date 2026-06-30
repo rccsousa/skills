@@ -1,5 +1,6 @@
 ---
 name: housekeeping
+license: MIT
 description: Tidy a repo after a task wraps - prune stale worktrees, delete plan files for merged PRs, and report what's left. Use when the user says "/housekeeping", "clean up the repo", "tidy up", or after a feature merges.
 disable-model-invocation: true
 ---
@@ -29,7 +30,7 @@ ls plans/
 ### 2. Per-worktree state table
 
 ```bash
-bash ~/.claude/lib/housekeeping-snapshot.sh
+bash scripts/housekeeping-snapshot.sh
 ```
 
 Output JSON: `{count, auto_removable:[...], needs_decision:[...], all:[...]}`. Each worktree has `{name, path, branch, lock, dirty, unpushed, pr_number, pr_state, pr_merged_at, auto_remove_safe}`.

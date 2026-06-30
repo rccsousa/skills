@@ -1,5 +1,6 @@
 ---
 name: surgical-review
+license: MIT
 description: Dispatch a strict code-reviewer subagent that enforces strict coding standards — SRP, naming-tells-the-story, no premature abstraction, let-it-fail on internal contracts, terse comments, surgical scope. Use before opening a PR, after a major feature/step, or when stuck.
 ---
 

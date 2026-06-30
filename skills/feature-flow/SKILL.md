@@ -1,5 +1,6 @@
 ---
 name: feature-flow
+license: MIT
 description: Orchestrate a feature end-to-end through plan → implement → review → fix. Final merge is performed manually by the user on GitHub. Use when the user says "take this through to merge-ready", "ship this autonomously", "full flow", "run the pipeline", or after approving a plan and asks for autonomous execution. Scales the pipeline to feature complexity.
 disable-model-invocation: true
 ---
@@ -45,7 +46,7 @@ If unsure, ask the user once. Don't ask between every phase — the user invoked
 
 ## Commit & push modes per phase
 
-See `~/.claude/lib/commit-push-policy.md` for the full policy. This skill's per-phase modes:
+See `references/commit-push-policy.md` for the full policy. This skill's per-phase modes:
 
 | Phase | Mode | Behavior |
 |---|---|---|
