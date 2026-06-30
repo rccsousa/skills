@@ -44,6 +44,21 @@ skill.
 | `catch-up-main` | Absorb upstream `main` into a diverged feature branch (merge/rebase decision). |
 | `feature-flow` | Orchestrate a feature end-to-end: plan → implement → review → fix. |
 
+### Feature pipeline (`one-shot`)
+| Skill | What it does |
+|-------|--------------|
+| `one-shot` | Drive a feature idea → merge-ready: plan → implement → review → fix, with `hitl`/`grill`/`auto` autonomy modes. Stops at "ready to merge". |
+| `code-review` | Review a diff (local branch or open PR) → structured findings packet (must-fix / should-fix / consider / nit). Feeds `code-fix`. |
+| `code-fix` | Apply fixes from a `code-review` packet — commits, optionally pushes + replies on threads. |
+| `create-pr` | Open a PR with a Conventional-Commits title and a What/Why/How body. |
+| `create-commit` | Stage + commit with a one-line Conventional-Commits message, grouped by logical change. |
+
+`one-shot`'s `grill` mode and PRD/issue flows call **companion skills**
+(`grill-with-docs`, `write-a-prd`, `prd-to-issues`, `issue-worker`) that live in a
+separate `building` plugin — not vendored here. Without them, run `--mode=hitl` or
+`--mode=auto`; `code-review`/`code-fix`/`create-pr`/`create-commit` and the repo's
+`council-of-agents` all resolve from this repo.
+
 ### Code review
 | Skill | What it does |
 |-------|--------------|
