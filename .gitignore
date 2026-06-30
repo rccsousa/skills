@@ -1,0 +1,9 @@
+# local-only, never publish
+*.local.json
+settings.local.json
+scheduled_tasks.lock
+.DS_Store
+
+# the live working dir is the source of truth; this repo is a sanitized export.
+# do not commit transient export artifacts
+.export-tmp/
