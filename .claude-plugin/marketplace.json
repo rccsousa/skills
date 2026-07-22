@@ -1,5 +1,8 @@
 {
   "name": "rccsousa-skills",
+  "owner": {
+    "name": "Rui Sousa"
+  },
   "description": "Rui's personal skills collection.",
   "plugins": [
     {
