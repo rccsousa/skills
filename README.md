@@ -70,6 +70,18 @@ separate `building` plugin — not vendored here. Without them, run `--mode=hitl
 | `red-team-findings` | Hand verified findings to a fresh independent agent to try to refute them. |
 | `council-of-agents` | Parallel multi-lens planning. |
 
+### Feedback → issues
+| Skill | What it does |
+|-------|--------------|
+| `triage` | Turn raw tester/user feedback into curated, agent-pickup GitHub issues, one item at a time. Feedback arrives **pasted** (message + screenshots) or **pulled from a Basecamp inbox column**. Grounds each item in the repo (read-only Explore), reaches a verdict, files a rich `file:line` issue; in Basecamp mode, comments the issue URL back on the card and moves it to a triaged column. |
+
+`triage`'s Basecamp mode needs the `basecamp` CLI (37signals'
+[`basecamp/basecamp-cli`](https://github.com/basecamp/basecamp-cli) plugin,
+installed separately) and a repo wired via `.basecamp/config.json`. Without it,
+`triage` still runs in **pasted**
+mode — paste a tester message + screenshots and it files issues into the current
+repo. Both modes require `gh`.
+
 ### Repo / workflow housekeeping
 | Skill | What it does |
 |-------|--------------|
