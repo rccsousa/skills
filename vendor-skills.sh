@@ -32,9 +32,11 @@ deps_for() {
   case "$1" in
     address-bot-review)   echo "classify-review-severity.sh fetch-review-threads.sh commit-push-policy.md" ;;
     catch-up-main)        echo "catch-up-shared.md catch-up-decide.sh commit-push-policy.md" ;;
+    drive-to-mergeable)   echo "request-and-poll-bot.sh classify-coderabbit-severity.sh resolve-pr-threads.sh commit-push-policy.md" ;;
     feature-flow)         echo "commit-push-policy.md" ;;
     housekeeping)         echo "housekeeping-snapshot.sh get-worktree-info.sh" ;;
     merge-pr)             echo "pr-checks.sh" ;;
+    mergeable-loop)       echo "bot-reviewed.sh pr-checks.sh" ;;
     pr-interview)         echo "extract-interview-hunks.sh" ;;
     pr-ready)             echo "fetch-review-threads.sh pr-checks.sh" ;;
     request-review)       echo "classify-review-severity.sh fetch-review-threads.sh" ;;
@@ -46,9 +48,9 @@ deps_for() {
 }
 
 SKILLS_WITH_DEPS=(
-  address-bot-review catch-up-main feature-flow housekeeping merge-pr
-  pr-interview pr-ready request-review review-codex-pr surgical-review
-  sync-worktree-skills
+  address-bot-review catch-up-main drive-to-mergeable feature-flow housekeeping
+  merge-pr mergeable-loop pr-interview pr-ready request-review review-codex-pr
+  surgical-review sync-worktree-skills
 )
 
 vendor_one() {  # $1 = skill name

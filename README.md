@@ -43,6 +43,8 @@ skill.
 | `fix-pr-checks` | Diagnose + fix failing CI (lint/format/type/test), fixing only your own diff. |
 | `catch-up-main` | Absorb upstream `main` into a diverged feature branch (merge/rebase decision). |
 | `feature-flow` | Orchestrate a feature end-to-end: plan → implement → review → fix. |
+| `drive-to-mergeable` | Drive an open PR to merge-ready via a dual-source review cascade (subagent + Copilot/CodeRabbit) — triage every finding into fix-now / file-issue / wontfix, autofix in-scope with a regression test, resolve threads. Stops at the human merge gate; never merges. |
+| `mergeable-loop` | The watch engine for `drive-to-mergeable` — a self-pacing 3-min session cron that polls the PR and escalates the autofix cascade on each real change (new bot findings / red CI), self-deleting on merge-ready. |
 
 ### Feature pipeline (`one-shot`)
 | Skill | What it does |
