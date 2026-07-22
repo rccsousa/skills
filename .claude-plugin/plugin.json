@@ -1,0 +1,6 @@
+{
+  "name": "rui-skills",
+  "version": "0.1.0",
+  "description": "Rui's personal Claude Code workflow skills: PR flow, code review, planning, and repo housekeeping.",
+  "author": { "name": "Rui Sousa" }
+}

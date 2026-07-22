@@ -1,0 +1,10 @@
+{
+  "name": "rui-skills",
+  "description": "Rui's personal skills collection.",
+  "plugins": [
+    {
+      "name": "rui-skills",
+      "source": "./"
+    }
+  ]
+}
