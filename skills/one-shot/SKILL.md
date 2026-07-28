@@ -325,6 +325,29 @@ base branch below. The auto-mode veto is read from the marker file directly (see
 the auto-mode section), not from `one-shot.md` prose. Proceed silently if
 `docs/agents/one-shot.md` is missing — the defaults are correct for most repos.
 
+### 0b. Standards brief — the repo's rules, not ours
+
+This skill and everything it dispatches carry **no opinion about how code
+should be shaped**. The target repo owns that. Before the scope check, read
+`CLAUDE.md` / `AGENTS.md` / `CONTRIBUTING.md` / `docs/` and distil a
+**standards brief**: at most a dozen lines covering layering rules,
+module/function shape, comment policy, test posture, PR size cap, naming, and
+the repo's own gate commands.
+
+Repo declares nothing → mark the brief `inferred` and fill it from the code
+itself: read the modules the work touches and their neighbours, and state the
+idiom you found. **Never import a personal charter into a repo that never
+asked for it.** An inferred convention that names its source file is honest;
+an imported one is a guess wearing authority.
+
+The brief is produced **once** and passed verbatim into every dispatched
+agent's prompt — implement, review, fix, simplify. A subagent inherits the
+repo's files, not what the orchestrator read and concluded. Pass it to
+`/code-review` as `--standards-brief=<path>` so it skips its own discovery.
+
+The PR size cap in the brief overrides the ~1k LOC default in the worker
+skeletons below wherever the repo states one.
+
 ### 1. Scope check
 
 Two discriminators, up front. **First: does it fit one agent session?**
@@ -692,7 +715,9 @@ In all halt cases: summarise state, ask user, do not silently retry.
 Each prompt briefs the agent cold. Always include:
 
 1. Phase name + artefact path (plan / PR / review URL).
-2. Project conventions (PR size cap, commit format, no co-author).
+2. The standards brief from step 0b, verbatim, flagged `declared` or
+   `inferred` — including the repo's PR size cap, commit format and gate
+   commands. Never a rule this skill invented.
 3. Expected return payload shape.
 4. Model hint ("Sonnet unless step tagged `needs-opus`").
 

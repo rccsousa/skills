@@ -61,7 +61,6 @@ companions ship here too, and are usable standalone:
 | `tdd` | Red → green → refactor; the implement phase's testing contract. |
 | `code-review` | Parallel-lens review of a diff (local branch or PR) emitting a machine findings packet: must-fix / should-fix / consider / nit. |
 | `code-fix` | The receive side of that cascade — consumes the findings packet, applies fixes, commits. |
-| `code-writing-standards` | The charter `tdd`, `code-review` and `code-fix` apply: module shape, seam discipline, comments. |
 | `create-commit` | Staged commit with a Conventional Commits message. |
 | `create-pr` | Push the branch and open the PR. |
 | `diagnosing-bugs` | Diagnosis loop for hard bugs and performance regressions, for when a phase hits one. |
@@ -69,6 +68,16 @@ companions ship here too, and are usable standalone:
 Install `one-shot` without them and the cascade has nothing to dispatch: it
 reaches the commit / review / PR phases, finds no skill, and stops without
 pushing.
+
+## Standards come from your repo
+
+None of these skills carry an opinion about how your code should be shaped.
+`one-shot` reads your `CLAUDE.md` / `AGENTS.md` / `CONTRIBUTING.md` / `docs/`
+once per run, distils a standards brief, and passes it to every agent it
+dispatches — so review findings and applied fixes cite *your* rules. Where a
+repo declares nothing, the cascade infers the convention from the code it is
+changing and says which file it inferred it from, rather than importing a house
+style from elsewhere.
 
 ## Scope
 

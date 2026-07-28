@@ -6,9 +6,9 @@ description: >
   Default mode is **local** — no PR required. Use inside one-shot's review
   phase before pushing, when self-reviewing a branch, or whenever the user asks
   to "review this", "code-review this branch", or "find issues before I push".
-  Parallel-lens engine emitting a machine findings packet for the cascade; for
-  a single deep human-facing reviewer enforcing the SRP/naming/let-it-fail
-  standards, use /surgical-review.
+  Reviews against the target repo's own declared standards, never an imported
+  house style. Parallel-lens engine emitting a machine findings packet for the
+  cascade; for a single deep human-facing reviewer, use /surgical-review.
 ---
 
 # Code Review
@@ -75,6 +75,14 @@ possible when a PR exists.
    warning under `lens_warnings` — they aren't part of the diff but the
    reviewer should know.
 3. **Read plan if `--plan` given.** Hold a checklist of expected tasks.
+3b. **Ground in the repo's standards.** Read `CLAUDE.md` / `AGENTS.md` /
+   `CONTRIBUTING.md` / `docs/` and distil a **standards brief** — a dozen lines
+   at most: layering rules, module/function shape, comment policy, test
+   posture, PR size cap, naming. Repo declares nothing → infer from the files
+   the diff touches and their neighbours, and mark the brief `inferred`. This
+   brief goes verbatim into every lens prompt (see **Standards smell
+   baseline**). Skip only when `--standards-brief=<path>` is passed by a
+   caller that already produced one (one-shot does).
 4. **Fan out lens agents in parallel** (default; serial if `--no-parallel`). One Agent per lens, all dispatched in a single message:
    - **security** — auth, injection, secrets, AuthZ holes, removed checks
    - **correctness** — bugs, races, swallowed errors, missing tests, broken contracts
@@ -126,9 +134,10 @@ Each lens agent gets a prompt that briefs:
 
 1. Its lens (e.g. "you are the security lens — look only for auth/injection/secrets/AuthZ holes")
 2. The diff (as text input or via `gh pr diff` re-fetch if context-limited)
-3. The plan path (only the plan-vs-diff lens reads the plan)
-4. Required return shape (partial YAML packet — same schema, only its findings)
-5. "Report under 300 words of explanation outside the packet — packet itself is the deliverable"
+3. The standards brief from step 3b, verbatim, flagged `declared` or `inferred`
+4. The plan path (only the plan-vs-diff lens reads the plan)
+5. Required return shape (partial YAML packet — same schema, only its findings)
+6. "Report under 300 words of explanation outside the packet — packet itself is the deliverable"
 
 Failure handling: if any lens agent errors or times out, the merge still
 completes with the other lenses' output, but the orchestrator surfaces a
@@ -168,26 +177,34 @@ standards, two output vocabularies: this skill emits the machine packet for
 
 ## Standards smell baseline
 
-**House charter first.** For code produced by us (not external PRs), the
-`/code-writing-standards` charter is the source of truth — the **correctness**
-lens invokes the `code-writing-standards` skill and applies its
-Functions / Modules / Seams / Comments rules and review checklist, mapping
-violations to severities (SRP/cohesion/temporal-decomposition/single-owner →
-should-fix; un-earned prose / HOW-comments / seam-in-pure-core → consider). The
-Fowler smells below are the generic backstop underneath the charter, not a
-replacement for it. (Deep single-reviewer enforcement of the charter is
-`/surgical-review`; this lens is the cascade's machine-packet echo of the same
-rules.)
+**The repo's standards, never an imported house style.** This skill carries no
+opinion about how code should be shaped. The source of truth is whatever the
+target repo declares — `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`,
+`CODING_STANDARDS.md`, `docs/`. Read them at run start, distil them into a
+**standards brief** (a dozen lines: layering rules, module/function shape,
+comment policy, test posture, PR size cap, naming), and pass that brief into
+every lens agent's prompt. A dispatched agent does not inherit what the
+orchestrator read.
 
-The correctness lens carries this fixed Fowler smell baseline (_Refactoring_,
-ch.3) on top of whatever the repo documents (`CODING_STANDARDS.md`,
-`CONTRIBUTING.md`). Two binding rules:
+When the repo declares nothing: **infer the standard from the code being
+changed** — read the neighbouring modules and match the idiom already in front
+of you (naming, error handling, test layout, comment density). An
+inferred-and-stated convention beats an imported one. Say so in the finding
+(`matches the pattern in <file>`) so the author can reject the inference.
+Never import a personal charter into a repo that never asked for it.
 
-- **Repo overrides.** A documented repo standard always wins; where it endorses
-  something the baseline would flag, suppress the smell.
+Under both, the correctness lens carries the fixed Fowler smell baseline
+(_Refactoring_, ch.3) below as a generic backstop. Three binding rules:
+
+- **Declared beats inferred beats baseline.** A documented repo standard always
+  wins; where it endorses something the baseline would flag, suppress the smell.
+  An inferred convention outranks the baseline the same way.
 - **Always a judgement call.** Each smell is a labelled heuristic ("possible
   Feature Envy"), never a hard violation → lands `consider`, not `must-fix`.
   Skip anything tooling already enforces.
+- **Cite the source.** A standards finding names where the rule came from —
+  `CLAUDE.md §Comments`, `inferred from lib/planning.ex`, or `Fowler baseline`.
+  An uncited standards finding is the reviewer's taste, and gets dropped.
 
 Each reads *what it is* → *fix*; match against the diff:
 

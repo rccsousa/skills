@@ -34,4 +34,4 @@ Ask: "What's the public interface, and which seams should we test?"
 - **Red before green.** Write the failing test first, then only enough code to pass it. Don't anticipate future tests or add speculative features.
 - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
 - **Refactoring is not part of the loop.** It belongs to the review stage (see the `code-review` skill), not the red → green implementation cycle.
-- Code written during the loop — implementation at green, cleanup at refactor — conforms to `/code-writing-standards`, the source of truth for module shape, seam discipline, function splits, and comments.
+- Code written during the loop — implementation at green, cleanup at refactor — follows the target repo's declared standards (`CLAUDE.md` / `AGENTS.md` / `CONTRIBUTING.md`). Where the repo declares none, extend the pattern already in the files you touch rather than importing one.

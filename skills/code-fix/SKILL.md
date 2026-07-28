@@ -80,7 +80,7 @@ review and fix always agree on the diff source.
    - Each worker:
      - Cd into its worktree (forked from head branch)
      - Read its scoped findings (file, line, summary, why, fix_hint)
-     - Apply fixes in code. Fixes must conform to `/code-writing-standards` — the source of truth for module shape, seam discipline, function splits, and comments — so a fix never reintroduces a standards violation.
+     - Apply fixes in code. Fixes conform to the **standards brief** passed in the worker prompt — the repo's own declared standards (`CLAUDE.md` / `AGENTS.md` / `CONTRIBUTING.md`), or, where the repo declares none, the idiom of the files being edited. A fix never introduces a pattern the surrounding code doesn't already use.
      - Stage + commit via `/create-commit` (one commit per logical fix). In `--mode=auto`, pass `--auto --i-understand-the-risk` through.
      - Run scoped local tests (best-effort, fast tests only)
      - Return: worktree path, branch name, commit SHAs, scoped-tests status
