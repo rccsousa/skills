@@ -99,17 +99,17 @@ that will execute. User has one chance to cancel.
 repo:        <owner/name>
 branch:      <head> → <base>
 plan:        <path or "free-text brief">
-mode chain:  /create-commit --auto  +  /verify (early)  +  /code-review (local)  +
-             /code-fix --mode=auto (local)  +  /simplify  +  /verify (final)  +
+mode chain:  /create-commit --auto  +  /run (early)  +  /code-review (local)  +
+             /code-fix --mode=auto (local)  +  /simplify  +  /run (final)  +
              /create-pr --auto
 
 actions that will execute without further prompts:
   - stage + commit (Conventional Commits, no co-author)
-  - early /verify — drive the app, capture evidence (HALT if broken)
+  - early /run — drive the app, capture evidence (HALT if broken)
   - local code-review on branch diff vs base (no GitHub write)
   - apply fixes + commit (still local, no push)
   - /simplify — apply behavior-preserving cleanups + commit (local)
-  - final /verify — re-drive the app on shipped state (HALT if broken)
+  - final /run — re-drive the app on shipped state (HALT if broken)
   - git push -u origin <branch>
   - gh pr create --draft
 
@@ -245,9 +245,10 @@ brief
 run at all before spending review + fix + simplify on it?). `verify²` =
 authoritative runtime check of the final shipped state (post-fix,
 post-simplify). Both **SKIP** on diffs with no runtime surface (docs / tests /
-type-decls / build-config only) — see steps 3b + 6c. `verify` is runtime
-observation (drive the app), **not** `mix test` / typecheck — those already
-ran in implement and prove CI passes, not that the change works.
+type-decls / build-config only) — see steps 3b + 6c. Both phases invoke the
+built-in `/run` skill: runtime observation (drive the app), **not** `mix test` /
+typecheck — those already ran in implement and prove CI passes, not that the
+change works.
 
 **Review + fix run on the local branch** before push + PR open. The
 findings packet flows in-memory from `/code-review` to `/code-fix` with no
@@ -426,17 +427,17 @@ Cascade continues into the early verify gate.
 
 ### 3b. Verify phase (early) — fail-fast runtime check
 
-Dispatch a verify agent that invokes `/verify` (built-in skill) on the diff so
+Dispatch a verify agent that invokes `/run` (built-in skill) on the diff so
 far. This is **runtime observation**, not tests: the agent builds + runs the
 app, drives the flow the change touches, and captures what it sees. TDD already
 proved CI passes in step 3 — this proves the change actually *works when
 exercised*, before review + fix + simplify spend effort on it.
 
 - **SKIP** when the diff has no runtime surface (docs / tests / type-decls /
-  build-config only). `/verify` reports `SKIP — no runtime surface: <reason>`
+  build-config only). `/run` reports `SKIP — no runtime surface: <reason>`
   and the cascade continues straight to review.
 - `hitl` / `grill`: evidence captured + surfaced; cascade continues.
-- `auto`: **fail-fast gate.** If `/verify` observes the change is broken at
+- `auto`: **fail-fast gate.** If `/run` observes the change is broken at
   runtime, **HALT** — do not run review/fix/simplify on a dead change, do not
   push, do not open a PR. Surface the evidence + the failing flow. Never retry
   silently.
@@ -512,7 +513,7 @@ already clean — `/simplify` will say so.
 
 ### 6c. Verify phase (final) — authoritative runtime check
 
-Re-run `/verify` on the **final** state (post-fix, post-simplify). Fix changed
+Re-run `/run` on the **final** state (post-fix, post-simplify). Fix changed
 behavior (bug fixes) and simplify *claims* behavior-preservation but can slip —
 this is the safety net that observes what actually ships.
 
@@ -677,7 +678,7 @@ Stop + return to user when:
 
 - Implementation agent reports a blocker (failing test it can't fix, ambiguous spec,
   missing fixture)
-- `/verify` returns FAIL — the change is broken at runtime (early 3b or final 6c).
+- `/run` returns FAIL — the change is broken at runtime (early 3b or final 6c).
   In `auto` this is a hard halt before any push/PR; surface the evidence.
 - Review surfaces a must-fix requiring architectural rethink (not a local fix)
 - CI is red after fix + cause isn't obvious
@@ -752,7 +753,7 @@ suggested follow-ups, ready_for_pr boolean).
 ### Verify-phase prompt (early = 3b, final = 6c — same skeleton)
 
 ```
-Run `/verify` (built-in) on the current branch's diff vs <base>.
+Run `/run` (built-in) on the current branch's diff vs <base>.
 
 This is runtime observation — build + run the app, drive the flow the change
 touches, capture evidence. Do NOT run `mix test` / the test suite / typecheck
@@ -854,9 +855,9 @@ overhead. The review cascade is self-contained; the rest compose in per phase.
 **Quality + runtime gates (built-in Claude Code skills — invoked via the Skill
 tool, not vendored files):**
 
-- `verify` — runtime observation gate (steps 3b + 6c). Drives the app to confirm
+- `run` — runtime observation gate (steps 3b + 6c). Drives the app to confirm
   the change works; fail-fast early, authoritative final. Bootstraps a per-repo
-  verify skill on first use. Distinct from `tdd`/`code-review` — it observes
+  runtime skill on first use. Distinct from `tdd`/`code-review` — it observes
   runtime, not source or tests.
 - `simplify` — quality cleanup pass (step 6b). 4-agent parallel fan-out
   (reuse / simplify / efficiency / altitude). Complements `code-review` (bugs),
