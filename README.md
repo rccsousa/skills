@@ -52,6 +52,19 @@ These four compose: `install-maintainer` wires the other three into three GitHub
 Actions stages, so a repo can triage and implement its own queue with a human
 gating the queue at one end and the merge at the other.
 
+`nightshift` is the unattended, many-issues form of the same idea — run it and go
+to bed:
+
+| Skill | What it does |
+|-------|--------------|
+| `nightshift` | Drain a labelled GitHub issue queue overnight. Enriches each issue, then emits a detached bash driver that runs one headless `one-shot` session per issue in its own worktree, opening a draft PR each. Parks itself on the usage limit, waits for RAM headroom, and halts on repeated failure. Never merges. |
+| `issue-enriching` | Turn a thin GitHub issue into one an agent can pick up cold — ground it in the repo, reach a verdict, append a delimited `## Agent brief` without touching the author's text. `triage`'s counterpart: same grounding core, but it rewrites an existing issue instead of filing a new one. |
+| `land` | Carry an open PR to merged behind a deterministic core-path gate that refuses to auto-merge anything touching migrations, CI, auth, or lockfiles. The only skill here that runs `gh pr merge`. |
+
+`nightshift` and `issue-enriching` share their grounding core with `triage` via
+`skills/_shared/issue-grounding.md` — the verdict table, the issue-body template,
+and the read-only Explore contract live there once.
+
 `one-shot` does not implement the phases itself — it dispatches them. Those
 companions ship here too, and are usable standalone:
 

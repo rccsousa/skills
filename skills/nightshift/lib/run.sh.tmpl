@@ -1,0 +1,282 @@
+#!/usr/bin/env bash
+# nightshift driver — emitted by /nightshift, then nohup'd. No Claude in this loop.
+# Placeholders {{...}} are substituted at emit time.
+set -uo pipefail
+
+RUN_DIR="{{RUN_DIR}}"          # .nightshift/<date>
+REPO_ROOT="{{REPO_ROOT}}"
+BASE="{{BASE}}"
+SLOTS="{{SLOTS}}"              # concurrent drain sessions
+LAND="{{LAND}}"                # true|false
+ISSUES="{{ISSUES}}"            # space-separated, nightshift-ready only
+
+LEDGER="$RUN_DIR/ledger.tsv"
+HALT="$RUN_DIR/.halt"
+VERIFY_LOCK="$REPO_ROOT/.nightshift/verify.lock"
+LEDGER_LOCK="$RUN_DIR/.ledger.lock"
+LOCK_SH="$HOME/.claude/skills/nightshift/lib/nightshift-lock.sh"
+GATE_SH="$HOME/.claude/skills/land/lib/core-gate.sh"
+BREAKER=3
+MIN_FREE_MB="{{MIN_FREE_MB}}"    # headroom required before dispatching a session
+QUEUE_LABEL="{{QUEUE_LABEL}}"    # nomination label; parked issues are returned to it
+
+ledger_append() {
+  bash "$LOCK_SH" acquire "$LEDGER_LOCK" 60 300 >/dev/null 2>&1
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "${3:--}" "${4:--}" "${5:--}" "${6:--}" >> "$LEDGER"
+  bash "$LOCK_SH" release "$LEDGER_LOCK"
+}
+
+# Free RAM in MB. macOS: pages free+inactive from vm_stat. Linux: MemAvailable.
+free_mb() {
+  if command -v vm_stat >/dev/null 2>&1; then
+    vm_stat | awk '
+      /page size of/ { for(i=1;i<=NF;i++) if ($i+0>1000) ps=$i }
+      /Pages free/ { f=$3 } /Pages inactive/ { v=$3 }
+      END { gsub(/\./,"",f); gsub(/\./,"",v); if(!ps) ps=4096; print int((f+v)*ps/1048576) }'
+  elif [ -r /proc/meminfo ]; then
+    awk '/MemAvailable/ { print int($2/1024) }' /proc/meminfo
+  else
+    echo 99999
+  fi
+}
+
+# Block until the box can take another fan-out session. Bounded — after MAX_WAIT
+# dispatch anyway rather than stalling the run forever.
+await_headroom() {
+  local n="$1" waited=0 need="${MIN_FREE_MB:-2048}" max=1800
+  while [ "$(free_mb)" -lt "$need" ]; do
+    [ "$waited" -ge "$max" ] && {
+      echo "issue $n: dispatching under memory pressure after ${waited}s" >> "$RUN_DIR/run.log"
+      return 0; }
+    sleep 30
+    waited=$(( waited + 30 ))
+  done
+}
+
+# /one-shot resolves a target from plans/*.md, prds/*-issues.md or prds/*.md and
+# otherwise treats the argument as free text — "ask once if ambiguous". A bare
+# issue number is not a recognised target, and an ask in a headless session has
+# nobody to answer it. So state the shape explicitly and leave nothing to infer.
+issue_brief() {
+  local n="$1" branch="$2" base_for_pr="$BASE"
+  cat <<EOF
+/one-shot --mode=auto --i-understand-the-risk --max-parallel=2
+
+Target: GitHub issue #$n in this repo. Read it now with \`gh issue view $n\`.
+It carries an "## Agent brief" section — findings with file:line, scope,
+acceptance, out-of-scope. That brief is the spec. Follow it; do not re-derive it.
+
+Obey its "### Nightshift scope" line exactly. If it says "part A only", implement
+ONLY those Scope steps and open ONE PR for them — do not build the deferred part
+because it seems adjacent. State in the PR body what was deferred and why.
+
+Pipeline shape: single-PR feature (plan -> implement -> review -> fix). This is
+NOT wayfinder work and NOT a multi-PR PRD. Do not run the scope check's ambiguity
+branch — the shape is given.
+
+Branch \`$branch\` is already checked out in this worktree. Commit here. Open the
+PR against \`$base_for_pr\` with "Closes #$n" in the body.
+
+Nobody is present. Never ask a question — if something is genuinely ambiguous,
+implement the narrowest reading, and say so in the PR body under a "Judgement
+calls" heading.
+EOF
+}
+
+# Consecutive failures with no success between = systemic. Stop burning the queue.
+check_breaker() {
+  local streak=0 status
+  while IFS=$'\t' read -r _ status _; do
+    case "$status" in
+      FAILED) streak=$(( streak + 1 )) ;;
+      DONE|LANDED) streak=0 ;;
+    esac
+  done < "$LEDGER"
+  if [ "$streak" -ge "$BREAKER" ]; then
+    touch "$HALT"
+    echo "CIRCUIT BREAKER — $streak consecutive failures, halting run" >> "$RUN_DIR/run.log"
+  fi
+}
+
+# ---------------------------------------------------------------- phase 2 worker
+drain_one() {
+  local n="$1"
+  [ -f "$HALT" ] && { ledger_append "$n" "SKIPPED" - - - "circuit breaker open"; return 0; }
+
+  local wt="$REPO_ROOT/.worktrees/ns-$n"
+  local branch="nightshift/issue-$n"
+  local log="$RUN_DIR/$n.log"
+
+  # Hours pass between enrichment and dispatch. An issue can be closed, or picked
+  # up by a human, in that window — re-check rather than building it again.
+  local state
+  state="$(gh issue view "$n" --json state --jq .state 2>/dev/null)"
+  if [ "$state" != "OPEN" ]; then
+    ledger_append "$n" "SKIPPED" - - - "issue is $state at dispatch time"
+    gh issue edit "$n" --remove-label nightshift-ready >/dev/null 2>&1
+    return 0
+  fi
+
+  # Memory, not CPU, is what kills a box running several fan-out sessions. Wait
+  # for headroom rather than dispatching into swap.
+  await_headroom "$n"
+
+  git -C "$REPO_ROOT" worktree add -b "$branch" "$wt" "$BASE" >>"$log" 2>&1 || {
+    ledger_append "$n" "FAILED" - - - "worktree add failed"; check_breaker; return 0; }
+
+  local guard="\
+VERIFY MUTEX. Before invoking /verify, run: bash $LOCK_SH acquire $VERIFY_LOCK. \
+Immediately after /verify returns — pass, fail, or skip — run: bash $LOCK_SH release $VERIFY_LOCK. \
+Never enter /verify without holding that lock. Never leave it held. Concurrent dev \
+servers collide on ports and auto-mode reads a port clash as 'broken at runtime', \
+which is a HALT.
+
+SHARED MACHINE. Other nightshift sessions are running right now. Cap your own \
+fan-out at 2 concurrent subagents. Instruct every subagent to run only scoped \
+checks on the files it owns — never the full suite. You run the full suite once, \
+at the end. Five agents each running every test is five copies of the same work \
+and enough memory pressure to kill the run.
+
+ASSUME YOU WILL BE KILLED. Commit locally whenever the tree is coherent, not just \
+at the end. A commit of unverified work is fine if the message says so plainly; a \
+commit that implies verification which never happened is not. Never leave the only \
+copy of anything in a subagent's context."
+
+  ( cd "$wt" && claude -p \
+      --permission-mode dontAsk \
+      --settings "$RUN_DIR/perms.drain.json" \
+      --add-dir "$wt" \
+      --append-system-prompt "$guard" \
+      "$(issue_brief "$n" "$branch")" ) >>"$log" 2>&1
+  local rc=$?
+
+  # Release defensively — a killed session leaves the lock held until TTL.
+  bash "$LOCK_SH" release "$VERIFY_LOCK" 2>/dev/null
+
+  # A session killed by the usage window is telling the truth that no estimate
+  # can. Believe it immediately: park the run, never retry into the wall.
+  if grep -qiE 'usage limit|rate.?limit|quota exceeded|5-hour limit' "$log" 2>/dev/null; then
+    touch "$HALT"
+    ledger_append "$n" "PARKED" - - "$rc" "usage window exhausted — remaining queue keeps its label"
+    echo "PARKED on usage limit at $(date '+%F %T')" >> "$RUN_DIR/run.log"
+    gh issue edit "$n" --add-label "$QUEUE_LABEL" --remove-label nightshift-ready >/dev/null 2>&1
+    return 0
+  fi
+
+  local pr loc
+  pr="$(gh pr list --head "$branch" --json number --jq '.[0].number' 2>/dev/null)"
+  loc="$(git -C "$wt" diff --shortstat "$BASE"...HEAD 2>/dev/null | tr -d '\n')"
+
+  if [ "$rc" -eq 0 ] && [ -n "$pr" ]; then
+    ledger_append "$n" "DONE" "$pr" "$loc" "$rc" -
+    gh issue edit "$n" --add-label nightshift-done --remove-label nightshift-ready >/dev/null 2>&1
+    gh issue comment "$n" --body "Nightshift opened #$pr." >/dev/null 2>&1
+    git -C "$REPO_ROOT" worktree remove "$wt" --force >/dev/null 2>&1
+  else
+    local reason
+    reason="$(tail -n 20 "$log" | tr '\n' ' ' | cut -c1-400)"
+    ledger_append "$n" "FAILED" "${pr:--}" "$loc" "$rc" "$reason"
+    gh issue edit "$n" --add-label nightshift-failed --remove-label nightshift-ready >/dev/null 2>&1
+    gh issue comment "$n" --body "Nightshift failed (exit $rc). Log: \`$log\`
+
+\`\`\`
+$(tail -n 40 "$log")
+\`\`\`" >/dev/null 2>&1
+    # worktree kept for post-mortem
+  fi
+  check_breaker
+}
+
+# --------------------------------------------------- phase 3 land-eligibility scan
+# The driver does NOT merge. It runs the core gate read-only and labels each PR so
+# the morning review knows which ones are safe to `/land` by hand.
+scan_one() {
+  local n="$1" pr="$2"
+  if bash "$GATE_SH" "$pr" "$REPO_ROOT" >>"$RUN_DIR/$n.gate.log" 2>&1; then
+    gh pr edit "$pr" --add-label nightshift-landable >/dev/null 2>&1
+    ledger_append "$n" "LANDABLE" "$pr" - - "core gate pass"
+  else
+    gh pr edit "$pr" --add-label nightshift-noland >/dev/null 2>&1
+    gh pr comment "$pr" --body "Nightshift core gate: not eligible for unattended merge.
+
+\`\`\`
+$(tail -n 20 "$RUN_DIR/$n.gate.log")
+\`\`\`" >/dev/null 2>&1
+    ledger_append "$n" "NOLAND" "$pr" - - "core gate"
+  fi
+}
+
+# ---------------------------------------------------------------- entry points
+if [ "${1:-}" = "--worker" ]; then
+  drain_one "$2"
+  exit 0
+fi
+
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+: > "$RUN_DIR/run.log"
+echo "nightshift start $(date '+%F %T')  base=$BASE slots=$SLOTS land=$LAND" >> "$RUN_DIR/run.log"
+echo "queue: $ISSUES" >> "$RUN_DIR/run.log"
+
+# PHASE 2 — drain. xargs -P is the slot pool; macOS bash 3.2 has no `wait -n`.
+printf '%s\n' $ISSUES | xargs -P "$SLOTS" -n 1 -I{} bash "$SELF" --worker {}
+
+git -C "$REPO_ROOT" worktree prune >/dev/null 2>&1
+
+# PHASE 3 — eligibility scan only. Merging stays a human action (`/land <PR#>`).
+if [ "$LAND" = "true" ] && [ ! -f "$HALT" ]; then
+  echo "phase 3 gate scan $(date '+%F %T')" >> "$RUN_DIR/run.log"
+  while IFS=$'\t' read -r n status pr _; do
+    [ "$status" = "DONE" ] && [ -n "$pr" ] && [ "$pr" != "-" ] && scan_one "$n" "$pr"
+  done < "$LEDGER"
+fi
+
+# ---------------------------------------------------------------- report
+{
+  echo "# Nightshift — $(basename "$RUN_DIR")"
+  echo
+  echo "base \`$BASE\` · slots $SLOTS · gate-scan $LAND"
+  if [ -f "$HALT" ]; then
+    echo
+    if grep -q $'\tPARKED\t' "$LEDGER" 2>/dev/null; then
+      echo "**PARKED — usage window exhausted.** Remaining issues keep \`nightshift\` and are first up next run."
+    else
+      echo "**HALTED — circuit breaker: $BREAKER consecutive failures.** Remaining issues keep \`nightshift\`."
+    fi
+  fi
+  echo
+  echo '| issue | status | pr | diff | reason |'
+  echo '|---|---|---|---|---|'
+  while IFS=$'\t' read -r n status pr loc _ reason; do
+    printf '| #%s | %s | %s | %s | %s |\n' "$n" "$status" "$pr" "$loc" "$reason"
+  done < "$LEDGER"
+
+  echo
+  echo '## Needs a human'
+  echo
+  echo 'Nothing below was judged by a person. Read before merging anything.'
+  echo
+  while IFS=$'\t' read -r n status pr _ _ reason; do
+    case "$status" in
+      NOLAND)   echo "- **#$n / PR #$pr** — core gate refused: $reason. Not a quick merge." ;;
+      FAILED)   echo "- **#$n** — halted, worktree kept at \`.worktrees/ns-$n\`: $reason" ;;
+      LANDABLE) echo "- **#$n / PR #$pr** — gate clear, but *nobody reviewed the code*. Gate checks paths, not correctness." ;;
+      PARKED)   echo "- **#$n** — never started, run parked here." ;;
+    esac
+  done < "$LEDGER"
+
+  echo
+  echo '## Unverified'
+  echo
+  echo 'Sessions were told to mark unverified commits in the message. Check for them:'
+  echo
+  echo '```'
+  echo "git log --all --grep=-i unverified --since='1 day ago' --oneline"
+  echo '```'
+  echo
+  echo "Logs: \`$RUN_DIR/<issue>.log\` · gate: \`<issue>.gate.log\` · enrich: \`<issue>.enrich.log\`"
+  echo
+  echo "finished $(date '+%F %T')"
+} > "$RUN_DIR/REPORT.md"
+
+echo "nightshift done $(date '+%F %T')" >> "$RUN_DIR/run.log"
+touch "$RUN_DIR/.finished"

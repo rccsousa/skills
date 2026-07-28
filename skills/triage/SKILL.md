@@ -82,46 +82,16 @@ a bug. Strip duplicate or stretch sub-asks the tester themselves hedged on
 
 ### 2. Ground (read-only Explore subagent)
 
-First, orient to the **current repo's** stack and conventions — read its
-`CLAUDE.md` / `AGENTS.md` / `docs/` so the grounding and the issue speak the
-repo's language (framework, layering rules, test/lint gates). Don't assume a
-stack; discover it.
-
-Then spawn an `Explore` agent to find, with `file:line`:
-- the module / component / template rendering the screen or feature
-- the data source (which API / context / query feeds it)
-- whether the needed data/fields already exist or are dropped upstream
-- existing patterns to reuse (tooltips, native collapse, relative-time helpers,
-  client hooks, etc.)
-
-Cap the report: **"under ~280 words, bullets only, file:line refs, no code
-dumps."** Never let the agent dump a transcript into the main thread.
-
-**Always pass `run_in_background: false`.** Background agents notify on
-completion, which only works interactively — in a headless run (CI, cron,
-claude-code-action) the notification never arrives, the session ends mid-item, and
-the card is left un-filed and un-moved. Never poll for a background agent with
-`Monitor` / `TaskList` / sleeps / no-op Bash calls.
+Follow `~/.claude/skills/_shared/issue-grounding.md` §1–2 — orient to the repo,
+then spawn a capped read-only `Explore` agent for `file:line` findings.
 
 This step is what makes the issue agent-pickup-ready. Don't skip it.
 
 ### 3. Verdict
 
-Classify before writing anything:
-
-| Verdict | Meaning | Action |
-|---------|---------|--------|
-| **bug** | code is wrong / data dropped / broken interaction | file `bug` issue with root cause |
-| **QoL / feature** | works, tester wants an improvement | file `enhancement` issue |
-| **not-a-bug** | expected behaviour / data-source limitation | file a small issue that *documents/discloses* it (tooltip, link) or close-worthy — say so |
-| **defer** | needs a product decision ("ask @X") | file lightweight `needs input` issue, name the decider, propose resolution, do NOT build |
-| **investigation** | answer needs runtime data, fuzzy payoff | file an investigation issue with hypotheses + next steps; do NOT blind-fix |
-
-**Density gate (important).** Before committing to a fix, ask: can this be
-resolved from code, or does it need live data / a runtime diff with uncertain
-payoff? If the latter → it's an investigation, not a fix. Watch for rabbit
-holes (e.g. "count differs from external tool by 0.1%" — usually the external
-tool aggregates more sources; document, don't chase).
+Classify before writing anything, per the verdict table in
+`~/.claude/skills/_shared/issue-grounding.md` §3 (bug / QoL-feature / not-a-bug /
+defer / investigation), including the **density gate**.
 
 If scope is genuinely ambiguous (e.g. QoL-only vs build a big feature), use
 `AskUserQuestion` with a recommended option first. Otherwise pick the obvious
@@ -129,18 +99,16 @@ call and proceed — say which.
 
 ### 4. File the issue
 
-Use the template below. Write the body to a temp file and create via `gh` on the
-**current repo** (no `--repo` flag needed — `gh` uses the repo you're in):
+Use the body template in `~/.claude/skills/_shared/issue-grounding.md` §5. Write
+the body to a temp file and create via `gh` on the **current repo** (no `--repo`
+flag needed — `gh` uses the repo you're in):
 
 ```
 gh issue create --title "<conventional title>" \
   --label <bug|enhancement> [--label <extra>] --body-file <tmpfile>
 ```
 
-Labels: `bug` for defects, `enhancement` for features/QoL/investigation. Add a
-repo-specific label (e.g. `design-conformance`) only after verifying it exists —
-`gh label list`. Create a missing label with `gh label create` rather than
-silently dropping it.
+Labels per `_shared/issue-grounding.md` §4.
 
 ### 5. Close the loop on the card (basecamp mode only)
 
@@ -165,58 +133,13 @@ column exists, omit `--to` (comment only) — don't invent board structure.
 One terse line back: verdict + issue URL (+ card moved, in basecamp mode). Keep a
 running tally across the batch.
 
-## Issue body template
+## Issue body, conventions, anti-patterns
 
-```markdown
-## Workstream
-<layer/area, in the repo's own vocabulary>
-<for investigations/defers, add a `## Type` line: bug | investigation | needs product input>
+All three live in `~/.claude/skills/_shared/issue-grounding.md` §5–7 — shared with
+`/issue-enriching`. In basecamp mode, link the source card URL in `## Context`.
 
-## Context
-<the tester's complaint, parsed. symptom + ask. positive signals noted.
- in basecamp mode, link the source card URL.>
+## Anti-patterns (triage-specific)
 
-## Findings (code inspection)
-<grounded file:line bullets from the Explore agent — root cause for bugs,
- data availability for features. This is what lets an agent start cold.>
-
-## Scope
-<numbered, concrete steps with file:line anchors and which existing pattern to reuse>
-
-## Acceptance
-<observable outcomes. ALWAYS include the repo's own build + test gates
- (discovered from CLAUDE.md/CI), and tests extended where logic changes.>
-
-## Out of scope
-<the stretch sub-asks the tester hedged on; sibling concerns split off>
-
-## PR split
-<single small PR | split A/B with the bigger win first>
-```
-
-## Bake the repo's own conventions into every issue
-
-Don't hardcode a stack — read it from the target repo and mirror it:
-
-- **Acceptance gates** come from the repo's CI / CLAUDE.md (e.g. a warnings-as-
-  errors compile step, a lint task, a typecheck) — not a fixed command. Find the
-  real gate and cite it so CI passes on first push.
-- **Layering / architecture rules** stated in the repo (e.g. "web layer goes
-  through context X, never Y directly") must be respected in the Scope steps.
-- **Reuse existing patterns over new abstractions** — point at the concrete
-  helper/component the repo already has (tooltip attr, native `<details>`,
-  a format helper, a client hook) rather than proposing a fresh one.
-
-## Anti-patterns
-
-- Filing an issue with no `file:line` grounding → agent has to re-discover everything.
-- Blind-fixing an investigation item without the runtime diff.
-- Bundling a tester's hedged stretch ask ("maybe corp assists? IDK") into the
-  core issue → scope creep. Split or mark out-of-scope.
-- Matching an external tool's number exactly when it aggregates more sources —
-  document the difference instead.
-- Letting the Explore agent dump a transcript into the main thread (cap it).
-- Assuming a stack. Read the repo's CLAUDE.md/AGENTS.md before grounding.
 - **Basecamp mode:** filing the issue but forgetting to comment + move the card —
   the board silently drifts out of sync. Always close the loop (step 5).
 - **Basecamp mode:** re-triaging cards already moved to the Triaged column. Only

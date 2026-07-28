@@ -1,6 +1,6 @@
 {
   "name": "rccsousa-skills",
-  "version": "0.4.0",
-  "description": "Claude Code workflow skills: PR flow, triage, code review, and autonomous maintainer pipelines.",
+  "version": "0.5.0",
+  "description": "Claude Code workflow skills: PR flow, triage, code review, unattended overnight queue drain, and autonomous maintainer pipelines.",
   "author": { "name": "rccsousa" }
 }
