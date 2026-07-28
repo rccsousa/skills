@@ -52,6 +52,24 @@ These four compose: `install-maintainer` wires the other three into three GitHub
 Actions stages, so a repo can triage and implement its own queue with a human
 gating the queue at one end and the merge at the other.
 
+`one-shot` does not implement the phases itself — it dispatches them. Those
+companions ship here too, and are usable standalone:
+
+| Skill | What it does |
+|-------|--------------|
+| `council-of-agents` | Parallel multi-lens planning amplifier — 3-5 subagents, one lens each, synthesised into a single design brief. |
+| `tdd` | Red → green → refactor; the implement phase's testing contract. |
+| `code-review` | Parallel-lens review of a diff (local branch or PR) emitting a machine findings packet: must-fix / should-fix / consider / nit. |
+| `code-fix` | The receive side of that cascade — consumes the findings packet, applies fixes, commits. |
+| `code-writing-standards` | The charter `tdd`, `code-review` and `code-fix` apply: module shape, seam discipline, comments. |
+| `create-commit` | Staged commit with a Conventional Commits message. |
+| `create-pr` | Push the branch and open the PR. |
+| `diagnosing-bugs` | Diagnosis loop for hard bugs and performance regressions, for when a phase hits one. |
+
+Install `one-shot` without them and the cascade has nothing to dispatch: it
+reaches the commit / review / PR phases, finds no skill, and stops without
+pushing.
+
 ## Scope
 
 This repo is published deliberately and reviewed by hand. It is not an automatic
