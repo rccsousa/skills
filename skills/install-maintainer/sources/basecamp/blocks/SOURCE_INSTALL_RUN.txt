@@ -1,0 +1,7 @@
+          set -euo pipefail
+          ver="${BASECAMP_CLI_VERSION}"
+          url="https://github.com/basecamp/basecamp-cli/releases/download/v${ver}/basecamp_${ver}_linux_amd64.tar.gz"
+          curl -fsSL "$url" -o /tmp/basecamp.tgz
+          echo "${BASECAMP_CLI_SHA256}  /tmp/basecamp.tgz" | sha256sum -c -
+          tar -xzf /tmp/basecamp.tgz -C /tmp basecamp
+          sudo install /tmp/basecamp /usr/local/bin/basecamp

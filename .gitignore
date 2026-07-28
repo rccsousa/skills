@@ -1,0 +1,8 @@
+# local-only, never publish
+*.local.json
+settings.local.json
+scheduled_tasks.lock
+.DS_Store
+
+# transient export artifacts
+.export-tmp/

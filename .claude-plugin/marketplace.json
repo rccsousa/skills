@@ -1,0 +1,13 @@
+{
+  "name": "rccsousa-skills",
+  "owner": {
+    "name": "rccsousa"
+  },
+  "description": "Claude Code workflow skills.",
+  "plugins": [
+    {
+      "name": "rccsousa-skills",
+      "source": "./"
+    }
+  ]
+}

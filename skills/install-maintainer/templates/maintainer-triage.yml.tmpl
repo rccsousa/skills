@@ -1,0 +1,230 @@
+name: {{WORKFLOW_NAME_TRIAGE}}
+
+# Stage 1 of the maintainer pipeline: pull items from the human-gated pickup
+# queue in {{SOURCE_LABEL}} and turn each into an agent-ready GitHub issue via
+# the `triage` skill.
+#
+# Two guardrails keep this safe:
+#   1. Queue gate — a human deliberately moves a small, scoped item into the
+#      pickup queue. The workflow reads ONLY that queue, so pending work and WIP
+#      elsewhere are untouched.
+#   2. Epic branch — feature-sized items are never filed as issues. The agent
+#      generates the sharp, item-specific OPEN QUESTIONS that must be answered
+#      before breakdown, comments them under a questions marker, and parks the
+#      item awaiting human answers. A human answers and returns it to the queue;
+#      re-triage then either files it (now scoped) or, if it is STILL an epic,
+#      routes it to the flagged destination (once-only guard — no ping-pong).
+#
+# ONE ITEM PER SESSION. `list` enumerates the queue and fans out a matrix leg per
+# item, each its own claude-code-action session. This is deliberate:
+#   - No context bleed. A single session draining N items carried item 1's
+#     grounding into item 3's verdict, and the transcript grew with every item.
+#   - Blast radius. A prompt-injecting item can only poison its own session,
+#     not every item triaged after it.
+#   - The MATRIX guarantees the drain, not the agent's diligence.
+# Legs run with max-parallel 1 (source writes race otherwise) and fail-fast off
+# (one bad item must not strand the others).
+#
+# CHEAPEST ITEM IS THE ONE NO AGENT SEES. Before the matrix is built, `list`
+# resolves items already carrying a TERMINAL marker entirely in bash — comment,
+# destination and move, no Claude session spawned. Those items would otherwise
+# burn a full session to reach a foregone conclusion. See the prefilter step.
+#
+# Requires secrets CLAUDE_CODE_OAUTH_TOKEN + {{SOURCE_TOKEN_SECRET}} and vars
+# SKILLS_MARKETPLACE_URL + SKILLS_PLUGIN_NAME. Until all four are set, every real
+# step is gated off (SETUP_READY), so scheduled runs are a clean green no-op.
+on:
+  schedule:
+    # Most ticks find an empty queue and cost nothing — the agent job is
+    # skipped before any Claude session is spent, so the floor is one cheap
+    # list call against the source.
+    - cron: "{{CRON_TRIAGE}}"
+  workflow_dispatch: {}
+
+# Serialise, don't cancel: two runs reading the same queue would double-triage,
+# and a cancelled run leaves items mid-move.
+concurrency:
+  group: {{SOURCE_NAME}}-triage
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# Shared, non-secret config. The source token and SETUP_READY read the `secrets`
+# context, which is only reliably available to a JOB-level `env` — so those two
+# are declared per job below rather than here.
+env:
+{{BLOCK:SOURCE_ENV_TRIAGE}}
+
+jobs:
+  # Enumerate the inbox once, so the matrix below is a fixed set of card ids
+  # decided BEFORE any agent runs.
+  list:
+    runs-on: ubuntu-latest
+    env:
+      {{SOURCE_TOKEN_SECRET}}: ${{ secrets.{{SOURCE_TOKEN_SECRET}} }}
+      # True only when every required secret/var is present. Until then the real
+      # steps below are skipped, so a dispatch ahead of setup is a clean green
+      # no-op. The downstream jobs inherit the gate for free: they key off
+      # `count`, which is only ever set when this job's gated step actually ran.
+      SETUP_READY: >-
+        ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != ''
+        && secrets.{{SOURCE_TOKEN_SECRET}} != ''
+        && vars.SKILLS_MARKETPLACE_URL != ''
+        && vars.SKILLS_PLUGIN_NAME != '' }}
+    outputs:
+      cards: ${{ steps.check.outputs.cards }}
+      count: ${{ steps.check.outputs.count }}
+    steps:
+      - name: Harden runner (egress firewall)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+{{BLOCK:SOURCE_EGRESS}}
+
+      - name: Install {{SOURCE_CLI}} CLI
+        if: env.SETUP_READY == 'true'
+        run: |
+{{BLOCK:SOURCE_INSTALL_RUN}}
+          {{SOURCE_CLI}} --version
+
+      - name: List {{ITEM}}s awaiting triage
+        id: check
+        if: env.SETUP_READY == 'true'
+        run: |
+{{BLOCK:SOURCE_LIST_RUN}}
+
+  # One session per card. `if` guards the empty case — a matrix over `[]` is a
+  # workflow error, not a no-op.
+  triage:
+    needs: list
+    if: needs.list.outputs.count != '0' && needs.list.outputs.count != ''
+    runs-on: ubuntu-latest
+    env:
+      {{SOURCE_TOKEN_SECRET}}: ${{ secrets.{{SOURCE_TOKEN_SECRET}} }}
+    permissions:
+      contents: read
+      issues: write # the triage skill files issues with `gh`
+      id-token: write # claude-code-action mints its GitHub token via OIDC
+    strategy:
+      # Basecamp writes (assign / comment / move) race across concurrent legs.
+      max-parallel: 1
+      # One card the agent can't action must not strand the rest of the queue.
+      fail-fast: false
+      matrix:
+        {{ITEM}}: ${{ fromJson(needs.list.outputs.cards) }}
+    steps:
+      # Egress firewall. The triage step runs an LLM over UNTRUSTED Basecamp card
+      # content with Bash + live tokens ({{SOURCE_TOKEN_SECRET}} is account-wide) — a prompt
+      # injection could try to exfiltrate a secret. harden-runner is wired here to
+      # cap outbound network, but starts in `audit` mode: it only LOGS egress, it
+      # does NOT block yet. After a clean run, fold any missing hosts from the
+      # harden-runner insights link into the allowlist below (OIDC + artifact
+      # upload will need token.actions.githubusercontent.com + uploads.github.com),
+      # then flip egress-policy to `block` — that is when exfil protection engages.
+      - name: Harden runner (egress firewall)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+{{BLOCK:SOURCE_EGRESS}}
+            api.anthropic.com:443
+
+      - uses: actions/checkout@v4
+
+      - name: Install {{SOURCE_CLI}} CLI
+        run: |
+{{BLOCK:SOURCE_INSTALL_RUN}}
+          {{SOURCE_CLI}} --version
+
+      - name: Triage {{ITEM}} into a GitHub issue
+        id: triage_run
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        with:
+          plugin_marketplaces: ${{ vars.SKILLS_MARKETPLACE_URL }}
+          plugins: ${{ vars.SKILLS_PLUGIN_NAME }}
+          prompt: |
+{{BLOCK:SOURCE_TRIAGE_PROMPT}}
+          claude_args: >-
+            --allowedTools Bash,Read,Glob,Grep,Task,Skill
+            --max-turns {{MAX_TURNS_TRIAGE}}
+            --model {{MODEL_TRIAGE}}
+
+      - name: Collect + summarise triage transcript
+        if: always()
+        run: |
+          set -uo pipefail
+          src="${RUNNER_TEMP}/claude-execution-output.json"
+          if [ ! -f "$src" ]; then
+            src="$(find "${RUNNER_TEMP}" -name 'claude-execution-output.json' -print -quit 2>/dev/null || true)"
+          fi
+          dest="${RUNNER_TEMP}/triage-transcript.json"
+          if [ -z "${src:-}" ] || [ ! -f "$src" ]; then
+            echo "No triage transcript found under ${RUNNER_TEMP}; nothing to archive."
+            exit 0
+          fi
+          cp "$src" "$dest"
+          echo "── Triage transcript — card ${{ matrix.{{ITEM}} }} ─────────────"
+          jq -r '
+            (if type=="array" then .[] else . end) as $e
+            | if $e.type=="assistant" then
+                ($e.message.content[]? | select(.type=="tool_use")
+                 | "  -> " + .name + " " + ((.input|tostring)[0:160]))
+              elif $e.type=="result" then
+                "  => result is_error=" + ($e.is_error|tostring)
+                  + " turns=" + ($e.num_turns|tostring)
+              else empty end
+          ' "$dest" 2>/dev/null || echo "  (transcript not parseable as JSON — see uploaded artifact)"
+          echo "────────────────────────────────────────────────────────"
+
+      - name: Archive triage transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: triage-transcript-${{ github.run_id }}-${{ matrix.{{ITEM}} }}
+          path: ${{ runner.temp }}/triage-transcript.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  # DRAIN GATE: a matrix leg reports success when its Claude action exits 0, NOT
+  # when its card actually left the column. Re-count the inbox once all legs
+  # are done and fail loud if anything remains. -1 means the count itself failed —
+  # fail closed. `always()` so a crashed leg still gets its card reported here.
+  verify:
+    needs: [list, triage]
+    if: always() && needs.list.outputs.count != '0' && needs.list.outputs.count != ''
+    runs-on: ubuntu-latest
+    env:
+      {{SOURCE_TOKEN_SECRET}}: ${{ secrets.{{SOURCE_TOKEN_SECRET}} }}
+    steps:
+      - name: Harden runner (egress firewall)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+{{BLOCK:SOURCE_EGRESS}}
+
+      - name: Install {{SOURCE_CLI}} CLI
+        run: |
+{{BLOCK:SOURCE_INSTALL_RUN}}
+
+      - name: Verify the inbox was drained
+        run: |
+{{BLOCK:SOURCE_VERIFY_RUN}}

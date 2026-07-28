@@ -1,0 +1,16 @@
+          set -euo pipefail
+          # Same partial-output hazard as the `list` job: a CLI that prints then
+          # dies leaves "0\n-1" here, which compares unequal to "0" and fails the
+          # gate for the wrong reason. Keep only the last line — a real count when
+          # the call succeeded, the -1 fallback when it did not.
+          remaining="$(basecamp cards list \
+            --column "$BASECAMP_QUEUE_COLUMN" \
+            --card-table "$BASECAMP_CARD_TABLE" \
+            --in "$BASECAMP_PROJECT" \
+            --agent --jq 'length' || echo -1)"
+          remaining="$(printf '%s\n' "$remaining" | tail -n 1)"
+          echo "Post-triage 'Agent Triage' holds ${remaining} card(s)."
+          if [ "${remaining}" != "0" ]; then
+            echo "::error::Triage left ${remaining} card(s) in 'Agent Triage' (-1 = re-count failed). Every card must be moved out to ready/flagged/awaiting-answers. Check the per-card transcript artifacts for why."
+            exit 1
+          fi

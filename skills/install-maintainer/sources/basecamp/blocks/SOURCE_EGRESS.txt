@@ -1,0 +1,5 @@
+            3.basecampapi.com:443
+            launchpad.37signals.com:443
+            app.basecamp.com:443
+            preview.app.basecamp.com:443
+            storage.app.basecamp.com:443

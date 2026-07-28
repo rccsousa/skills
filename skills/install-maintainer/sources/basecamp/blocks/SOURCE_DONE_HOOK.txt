@@ -1,0 +1,16 @@
+            if [ -n "${BASECAMP_TOKEN:-}" ] && command -v basecamp >/dev/null 2>&1; then
+              body="$(gh issue view "$ISSUE" --json body --jq '.body' 2>/dev/null || true)"
+              card_id="$(printf '%s' "$body" | grep -oE 'basecamp-card:[0-9]+' | head -n1 | cut -d: -f2 || true)"
+              if [ -n "$card_id" ]; then
+                echo "Commenting draft PR link on Basecamp card ${card_id}."
+                basecamp comment "$card_id" "🤖 Draft PR: ${pr_url}" \
+                  --in "$BASECAMP_PROJECT" || echo "card comment failed (non-fatal)."
+                echo "Moving Basecamp card ${card_id} to 'In review'."
+                basecamp cards move "$card_id" \
+                  --to "$BASECAMP_REVIEW_COLUMN" \
+                  --card-table "$BASECAMP_CARD_TABLE" \
+                  --in "$BASECAMP_PROJECT" || echo "card move failed (non-fatal)."
+              else
+                echo "No basecamp-card marker in issue #${ISSUE} — skipping board move."
+              fi
+            fi

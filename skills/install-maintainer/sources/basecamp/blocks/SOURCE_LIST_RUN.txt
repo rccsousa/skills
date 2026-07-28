@@ -1,0 +1,68 @@
+          set -euo pipefail
+          # Let CLI errors surface in the log (no 2>/dev/null). On any failure
+          # `|| echo []` yields an empty queue for this run; it recovers next tick.
+          raw="$(basecamp cards list \
+            --column "$BASECAMP_QUEUE_COLUMN" \
+            --card-table "$BASECAMP_CARD_TABLE" \
+            --in "$BASECAMP_PROJECT" \
+            --agent --jq '[.[].id]' || echo '[]')"
+          # Card ids are server-generated integers. Anything else — a malformed
+          # listing, or a title that managed to reach this field — is refused
+          # rather than interpolated into the matrix below.
+          #
+          # `-s` is load-bearing, not style. When the CLI dies AFTER emitting
+          # partial output, `|| echo '[]'` appends to it and `raw` holds TWO JSON
+          # documents ("0\n[]"). A streaming jq echoes one line per document, so
+          # `cards` goes multiline and the $GITHUB_OUTPUT write below dies with
+          # "Invalid format '[]'" — which is what failed every scheduled run of
+          # the parked flow. Slurping collapses the stream; `last` keeps the
+          # fallback when one is present.
+          cards="$(printf '%s' "$raw" \
+            | jq -s -c 'last // [] | if type == "array" and all(.[]; type == "number") then . else [] end' \
+            2>/dev/null || echo '[]')"
+          echo "'Agent Triage' column holds $(printf '%s' "$cards" | jq 'length') card(s): ${cards}"
+
+          # PREFILTER — resolve already-marked cards in bash, spawn no session.
+          #
+          # A card carrying a TERMINAL marker was fully handled by an earlier run
+          # that then failed to move it (or a human dragged it back in). Its
+          # destination is a lookup, not a judgement, so paying for a Claude
+          # session to re-derive it is pure waste. The agent prompt keeps the same
+          # SKIP rule as a belt — this is the braces, one tier cheaper.
+          #
+          #   "🔗 Filed:"    -> "Agent ready"      (issue already exists)
+          #   "⏭️ Skipped:"  -> "Flagged by agent" (suspicious / still-epic)
+          #
+          # "❓ Questions:" is deliberately NOT terminal: it means a human answered
+          # and sent the card back, so it must reach an agent for full re-triage.
+          # A card carrying BOTH resolves as skipped — the ⏭️ marker is the later,
+          # terminal verdict.
+          remaining='[]'
+          for id in $(printf '%s' "$cards" | jq -r '.[]'); do
+            comments="$(basecamp comments list "$id" \
+              --in "$BASECAMP_PROJECT" --all \
+              --agent --jq '[.[]?.content] | join("\n")' 2>/dev/null || echo '')"
+            dest=""; reason=""
+            if printf '%s' "$comments" | grep -qF '⏭️ Skipped:'; then
+              dest="$BASECAMP_FLAGGED_COLUMN"; reason="already skipped"
+            elif printf '%s' "$comments" | grep -qF '🔗 Filed:'; then
+              dest="$BASECAMP_READY_COLUMN"; reason="already filed"
+            fi
+            if [ -n "$dest" ]; then
+              if basecamp cards move "$id" --to "$dest" \
+                   --card-table "$BASECAMP_CARD_TABLE" \
+                   --in "$BASECAMP_PROJECT" >/dev/null; then
+                echo "  prefilter: card ${id} ${reason} -> column ${dest} (no agent session)"
+                continue
+              fi
+              # Move failed — fall through to an agent session rather than drop
+              # the card, or the drain gate below fails with no one to fix it.
+              echo "  prefilter: card ${id} ${reason} but move FAILED — handing to an agent"
+            fi
+            remaining="$(printf '%s' "$remaining" | jq -c --argjson c "$id" '. + [$c]')"
+          done
+
+          count="$(printf '%s' "$remaining" | jq 'length')"
+          echo "cards=${remaining}" >> "$GITHUB_OUTPUT"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          echo "${count} card(s) need an agent session: ${remaining}"
