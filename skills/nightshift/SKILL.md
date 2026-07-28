@@ -269,7 +269,7 @@ Copy `lib/perms.drain.json` into the run dir. Read `lib/run.sh.tmpl`, substitute
 Write to `<run-dir>/run.sh`, `chmod +x`, `touch <run-dir>/ledger.tsv`.
 
 The template implements: xargs slot pool (no `wait -n` — macOS bash is 3.2),
-worktree per issue, the `/verify` mutex injected via `--append-system-prompt`,
+worktree per issue, the `/run` mutex injected via `--append-system-prompt`,
 ledger append under its own lock, the circuit breaker, the phase-3 gate scan, and
 `REPORT.md`.
 
@@ -288,9 +288,9 @@ not schedule a wakeup, do not report results. The next `/nightshift` does that.
 - **Concurrency**: `slots` worktrees at `.worktrees/ns-<n>`, branch
   `nightshift/issue-<n>` off base. Removed on success, **kept on failure** for
   post-mortem.
-- **Verify mutex**: `/verify` builds and *runs the app*, twice per issue, and in
+- **Runtime-gate mutex**: `/run` builds and *runs the app*, twice per issue, and in
   auto mode a failure is a hard HALT. Concurrent dev servers collide on ports, so
-  one session verifies at a time — `.nightshift/verify.lock`, atomic `mkdir` (no
+  one session runs the gate at a time — `.nightshift/verify.lock`, atomic `mkdir` (no
   `flock` on macOS), 20-minute TTL so a dead session can't deadlock the run.
   Implement/review/fix stay fully parallel.
 - **Failures isolate**: a halted issue is labelled, commented with the log tail,
@@ -367,7 +367,7 @@ driver, check the queue, then run it by hand.
 - Polling for the run to finish. It's overnight. Come back tomorrow.
 - Enriching and draining in one session per issue — you lose the pre-drain view of
   how much of the queue is actually workable.
-- Running `/verify` outside the mutex. Port collision reads as "broken at runtime",
+- Running `/run` outside the mutex. Port collision reads as "broken at runtime",
   which auto mode treats as a HALT, which feeds the circuit breaker.
 - Handing sessions a blanket permission skip instead of the deny-list.
 - Asking the user anything after the banner. Nobody's there.

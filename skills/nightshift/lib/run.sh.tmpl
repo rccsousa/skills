@@ -125,9 +125,9 @@ drain_one() {
     ledger_append "$n" "FAILED" - - - "worktree add failed"; check_breaker; return 0; }
 
   local guard="\
-VERIFY MUTEX. Before invoking /verify, run: bash $LOCK_SH acquire $VERIFY_LOCK. \
-Immediately after /verify returns — pass, fail, or skip — run: bash $LOCK_SH release $VERIFY_LOCK. \
-Never enter /verify without holding that lock. Never leave it held. Concurrent dev \
+RUNTIME-GATE MUTEX. Before invoking /run, run: bash $LOCK_SH acquire $VERIFY_LOCK. \
+Immediately after /run returns — pass, fail, or skip — run: bash $LOCK_SH release $VERIFY_LOCK. \
+Never enter /run without holding that lock. Never leave it held. Concurrent dev \
 servers collide on ports and auto-mode reads a port clash as 'broken at runtime', \
 which is a HALT.
 
