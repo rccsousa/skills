@@ -169,6 +169,10 @@ slots (config `max_slots`, else 3), headroom (config `min_free_mb`, else 2048),
 nomination label (config `queue_label`, else `nightshift`), run dir
 `.nightshift/$(date +%F)`.
 
+**`/nightshift-prep` does this setup for you** — labels, config, gitignore,
+permission-ceiling check, plus curating which issues get nominated. Run it first
+in a new repo. The checks below are the fallback when it hasn't been.
+
 **Create the machinery labels now, before anything else runs.** Sessions cannot
 create them — see the permission ceiling below — so a missing label makes the
 enrich phase fail with `ENRICH-FAILED <n> label-...-missing`:

@@ -57,6 +57,7 @@ to bed:
 
 | Skill | What it does |
 |-------|--------------|
+| `nightshift-prep` | Get a repo and its backlog ready for a night. Sets up labels, config and the core-path gate, checks the permission ceiling, then scores every open issue for whether an unattended session could actually finish it and nominates the ones you approve. Stops at nomination. |
 | `nightshift` | Drain a labelled GitHub issue queue overnight. Enriches each issue, then emits a detached bash driver that runs one headless `one-shot` session per issue in its own worktree, opening a draft PR each. Parks itself on the usage limit, waits for RAM headroom, and halts on repeated failure. Never merges. |
 | `issue-enriching` | Turn a thin GitHub issue into one an agent can pick up cold — ground it in the repo, reach a verdict, append a delimited `## Agent brief` without touching the author's text. `triage`'s counterpart: same grounding core, but it rewrites an existing issue instead of filing a new one. |
 | `land` | Carry an open PR to merged behind a deterministic core-path gate that refuses to auto-merge anything touching migrations, CI, auth, or lockfiles. The only skill here that runs `gh pr merge`. |
