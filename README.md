@@ -83,6 +83,12 @@ Install `one-shot` without them and the cascade has nothing to dispatch: it
 reaches the commit / review / PR phases, finds no skill, and stops without
 pushing.
 
+Standalone:
+
+| Skill | What it does |
+|-------|--------------|
+| `linear-grooming` | Reconcile the Linear issues assigned to you with GitHub PR state — merged → done, open → in review, draft → in progress — and flag stale or ambiguous tickets. Uses the Linear MCP by default or the Linear API with a key; `bin/linear-grooming` runs it on a loop. Needs `bun`. Run `setup.sh` once to set project, repos, team and status names. |
+
 ## Standards come from your repo
 
 None of these skills carry an opinion about how your code should be shaped.

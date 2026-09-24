@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# linear-grooming [--project P] [--api|--mcp] [--every 1h] [--once]
+#   --api: shell loop, no Claude (needs Linear key). --mcp: opens claude running /loop /linear-grooming apply.
+#   Default: --api when a Linear key exists, else --mcp.
+set -euo pipefail
+G="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)/lib/linear-grooming.ts"
+project="" mode="" every="1h" once=0
+while (($#)); do
+  case $1 in
+    --project) project=$2; shift 2 ;;
+    --api) mode=api; shift ;;
+    --mcp) mode=mcp; shift ;;
+    --every) every=$2; shift 2 ;;
+    --once) once=1; shift ;;
+    *) echo "usage: linear-grooming [--project P] [--api|--mcp] [--every 1h] [--once]" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -z $mode ]]; then
+  if [[ -n ${LINEAR_API_KEY:-} ]] || security find-generic-password -s linear-api-key >/dev/null 2>&1; then mode=api; else mode=mcp; fi
+fi
+
+pflag=()
+[[ -n $project ]] && pflag=(--project "$project")
+dir=$(bun "$G" project "${pflag[@]}" | jq -r .dir)
+
+if [[ $mode == mcp ]]; then
+  cd "$dir"
+  if ((once)); then exec claude "/linear-grooming apply ${pflag[*]}"; fi
+  exec claude "/loop $every /linear-grooming apply ${pflag[*]}"
+fi
+
+secs=$(awk -v e="$every" 'BEGIN { n = e + 0; u = substr(e, length(e)); print (u == "h" ? n * 3600 : u == "m" ? n * 60 : n) }')
+while :; do
+  echo "== $(date '+%F %T')"
+  bun "$G" plan --api "${pflag[@]}" && bun "$G" apply safe
+  ((once)) && break
+  sleep "$secs"
+done
