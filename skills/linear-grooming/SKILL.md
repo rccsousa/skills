@@ -27,17 +27,29 @@ Linear MCP tools below are named `list_issues` / `get_issue` / `save_issue`; use
      `{"ENG-1": {"attachments": ["https://github.com/…/pull/1"], "children": [{"identifier": "ENG-2", "state": {"name": "Done", "type": "completed"}}]}}`
      — every NEEDS id present, empty arrays when none. Re-run with `--enrich <tmp>/enrich.json`.
 4. Relay the table verbatim.
-5. On approval (or `apply` arg): `bun $G apply <safe|all|1,3,5>` → prints `{"id","state"}` lines → one `save_issue` `{id, state}` each, in parallel. Report `ok`/`FAIL` per ID.
+5. On approval (or `apply` arg): `bun $G apply <safe|all|1-3,5>` → prints `{"id","state"}` lines → `save_issue {id, state}` for each (parallel is fine).
+6. Verify each with `get_issue`: its `status` / `stateHistory` is the truth. The `save_issue` response and `list_issues` can lag and still show the old status — never verify with them. Retry `save_issue` once for any not at target; report `ok`/`FAIL` per ID.
 
 ## API flow (`--api`)
 
 ```bash
 bun $G plan --api [--project P]
-bun $G apply <safe|all|1,3,5>     # mutates directly
+bun $G apply <safe|all|1-3,5>     # mutates and checks the status each update returns
 ```
 
 ## Rules
 
-Flags never applied — relay, the user decides. Unattended: `safe` only; `ask` rows and flags go in the report. Only status changes; never comments, labels, assignee, cycle. Decision rules: `decide()` in `$G`.
+Evidence: your PRs whose title/branch contains the exact ID (`ENG-113` ≠ `ENG-1130`), PR links attached to the issue, pushed branches, and local branches in the project dir with commits on no remote.
+
+- Parent with open children → unchanged; all closed → done (ask).
+- Merged PR, none open → done: `safe`, or `ask` when a merged PR's body reads unfinished ("NOT_RUN", "was not run", "unverified", "deferred", "next PR"…; the phrase is quoted in the row).
+- Open non-draft PR → in review; only drafts → in progress (safe).
+- Pushed branch or unpushed local commits, no PR → in progress (ask).
+- Flags, never applied: only closed-unmerged PRs; only body mentions; started with no work; your open PR on a ticket that isn't one of your open ones.
+- Backwards moves are never `safe`.
+
+Flags are relayed; the user decides. Unattended: `safe` only; `ask` rows and flags go in the report. Only status changes; never comments, labels, assignee, cycle.
+
+Right after applying, `list_issues` may still show old statuses, so an immediate re-plan can re-propose applied moves; re-applying is a no-op.
 
 Loop launcher: `linear-grooming [--project P] [--api|--mcp] [--every 1h] [--once]` (linked by setup).

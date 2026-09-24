@@ -2,8 +2,8 @@
 // linear-grooming.ts project [--project P]                         → print resolved {name,dir,repos,team}
 // linear-grooming.ts plan [--project P] [--api | --issues F [--enrich E]]
 //   --api: fetch from Linear GraphQL. --issues: MCP list_issues output (array or pages of {issues}).
-//   MCP mode exits 3 + prints `NEEDS <ids>` when no-PR issues need attachments/children (--enrich).
-// linear-grooming.ts apply <safe|all|1,3,5>                         → api plan: mutate; mcp plan: print {id,state} lines
+//   MCP mode exits 3 + prints `NEEDS <ids>` when parents or no-PR issues need children/attachments (--enrich).
+// linear-grooming.ts apply <safe|all|1-3,5>                         → api plan: mutate + verify; mcp plan: print {id,state} lines
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 
@@ -18,8 +18,15 @@ const RANK: Record<string, number> = {
   started: 3,
   completed: 4,
 };
+// Heuristic, calibrated on real PR bodies ("partial" alone mostly means "partial index"); only downgrades safe → ask.
+const UNFINISHED =
+  /\bNOT_RUN\b|\b(?:was|were|is|are|did) not (?:yet )?(?:been )?(?:run|verified|tested|exercised)\b|\bunverified\b|\bpartial(?:ly)? (?:done|complete|completed|implemented|delivered|verified)\b|\bverdict\W+partial\b|\bdeferred\b|\b(?:later|next|separate|follow-?up) (?:pr|slice)\b/i;
 type Statuses = { inProgress: string; inReview: string; done: string };
-const DEFAULT_STATUSES: Statuses = { inProgress: "In Progress", inReview: "In Review", done: "Done" };
+const DEFAULT_STATUSES: Statuses = {
+  inProgress: "In Progress",
+  inReview: "In Review",
+  done: "Done",
+};
 let S = DEFAULT_STATUSES;
 const statusRank = (name: string): number | undefined =>
   ({ [S.inProgress]: 3, [S.inReview]: 3.5, [S.done]: 4 })[name];
@@ -40,15 +47,23 @@ type Issue = {
   states: { id: string; name: string; type: string }[] | null;
   children: Child[] | null;
   attachments: string[] | null;
+  isParent: boolean;
 };
-type Pr = {
+type GhPr = {
   number: number;
   state: string;
   isDraft: boolean;
   mergedAt: string | null;
   url: string;
-  match: string;
+  title: string;
+  headRefName: string;
+  body: string | null;
 };
+type Pr = Pick<GhPr, "number" | "state" | "isDraft" | "mergedAt" | "url"> & {
+  match: string;
+  unfinished: string | null;
+};
+type LocalBranch = { branch: string; ahead: number };
 type Enrichment = Record<
   string,
   { attachments?: string[]; children?: Child[] }
@@ -78,19 +93,32 @@ function flag(args: string[], name: string): string | undefined {
   return i >= 0 ? args[i + 1] : undefined;
 }
 
+// Exact ID match: ENG-113 must not match ENG-1130.
+function mentions(text: string | null | undefined, id: string): boolean {
+  const key = id.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  return new RegExp(`(?:^|[^a-z0-9])${key}(?![0-9])`).test(
+    (text ?? "").toLowerCase(),
+  );
+}
+
 async function resolveProject(arg?: string): Promise<Project> {
-  const config: Record<string, Omit<Project, "name" | "statuses"> & { statuses?: Partial<Statuses> }> = existsSync(
-    PROJECTS_FILE,
-  )
-    ? await Bun.file(PROJECTS_FILE).json()
-    : {};
+  const config: Record<
+    string,
+    Omit<Project, "name" | "statuses"> & { statuses?: Partial<Statuses> }
+  > = existsSync(PROJECTS_FILE) ? await Bun.file(PROJECTS_FILE).json() : {};
   const expand = (d: string) => d.replace(/^~/, HOME);
-  const withStatuses = (p: Omit<Project, "name" | "statuses"> & { statuses?: Partial<Statuses> }) => ({
+  const withStatuses = (
+    p: Omit<Project, "name" | "statuses"> & { statuses?: Partial<Statuses> },
+  ) => ({
     ...p,
     statuses: { ...DEFAULT_STATUSES, ...p.statuses },
   });
   if (arg && config[arg])
-    return { name: arg, ...withStatuses(config[arg]), dir: expand(config[arg].dir) };
+    return {
+      name: arg,
+      ...withStatuses(config[arg]),
+      dir: expand(config[arg].dir),
+    };
   const dir = expand(arg ?? process.cwd());
   if (!existsSync(dir))
     throw new Error(
@@ -103,7 +131,13 @@ async function resolveProject(arg?: string): Promise<Project> {
     ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
     top,
   ).trim();
-  return { name: top.split("/").pop()!, dir: top, repos: [repo], team: null, statuses: DEFAULT_STATUSES };
+  return {
+    name: top.split("/").pop()!,
+    dir: top,
+    repos: [repo],
+    team: null,
+    statuses: DEFAULT_STATUSES,
+  };
 }
 
 function apiKey(): string {
@@ -160,6 +194,7 @@ async function fetchIssuesApi(team: string | null): Promise<Issue[]> {
         states: n.team.states.nodes,
         children: n.children.nodes,
         attachments: n.attachments.nodes.map((a: { url: string }) => a.url),
+        isParent: n.children.nodes.length > 0,
       });
     }
     after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
@@ -179,6 +214,7 @@ async function readIssuesMcp(
   const enrich: Enrichment = enrichFile
     ? await Bun.file(enrichFile).json()
     : {};
+  const parents = new Set(nodes.map((n: any) => n.parentId).filter(Boolean));
   return nodes
     .filter((n: any) => !TERMINAL.has(n.statusType))
     .map((n: any) => ({
@@ -187,12 +223,13 @@ async function readIssuesMcp(
       title: n.title,
       state: { name: n.status, type: n.statusType },
       states: null,
-      children: enrich[n.id]?.children ?? (enrichFile ? [] : null),
-      attachments: enrich[n.id]?.attachments ?? (enrichFile ? [] : null),
+      children: enrich[n.id]?.children ?? null,
+      attachments: enrich[n.id]?.attachments ?? null,
+      isParent: parents.has(n.id),
     }));
 }
 
-function authoredPrs(repo: string) {
+function authoredPrs(repo: string): GhPr[] {
   return JSON.parse(
     sh([
       "gh",
@@ -209,29 +246,36 @@ function authoredPrs(repo: string) {
       "--json",
       "number,title,state,isDraft,mergedAt,url,headRefName,body",
     ]),
-  ) as (Pr & { title: string; headRefName: string; body: string })[];
+  );
 }
 
-function prEvidence(issue: Issue, pool: ReturnType<typeof authoredPrs>): Pr[] {
-  const id = issue.identifier.toLowerCase();
+function toPr(
+  p: Pick<GhPr, "number" | "state" | "isDraft" | "mergedAt" | "url" | "body">,
+  match: string,
+): Pr {
+  return {
+    number: p.number,
+    state: p.state,
+    isDraft: p.isDraft,
+    mergedAt: p.mergedAt,
+    url: p.url,
+    match,
+    unfinished: (p.body ?? "").match(UNFINISHED)?.[0] ?? null,
+  };
+}
+
+function prEvidence(issue: Issue, pool: GhPr[]): Pr[] {
+  const id = issue.identifier;
   const found = new Map<string, Pr>();
   for (const p of pool) {
-    const match = p.title.toLowerCase().includes(id)
+    const match = mentions(p.title, id)
       ? "title"
-      : p.headRefName.toLowerCase().includes(id)
+      : mentions(p.headRefName, id)
         ? "branch"
-        : new RegExp(`\\b${id}\\b`).test((p.body ?? "").toLowerCase())
+        : mentions(p.body, id)
           ? "body"
           : null;
-    if (match)
-      found.set(p.url, {
-        number: p.number,
-        state: p.state,
-        isDraft: p.isDraft,
-        mergedAt: p.mergedAt,
-        url: p.url,
-        match,
-      });
+    if (match) found.set(p.url, toPr(p, match));
   }
   for (const url of issue.attachments ?? []) {
     if (
@@ -246,10 +290,10 @@ function prEvidence(issue: Issue, pool: ReturnType<typeof authoredPrs>): Pr[] {
         "view",
         url,
         "--json",
-        "number,state,isDraft,mergedAt,url",
+        "number,state,isDraft,mergedAt,url,body",
       ]),
     );
-    found.set(url, { ...v, match: "attachment" });
+    found.set(url, toPr(v, "attachment"));
   }
   return [...found.values()];
 }
@@ -264,6 +308,32 @@ function remoteBranches(repos: string[]): string[] {
   );
 }
 
+function unpushedBranches(dir: string, ids: string[]): LocalBranch[] {
+  return sh(
+    ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    dir,
+  )
+    .split("\n")
+    .filter((branch) => branch && ids.some((id) => mentions(branch, id)))
+    .map((branch) => ({
+      branch,
+      ahead: Number(
+        sh(
+          [
+            "git",
+            "rev-list",
+            "--count",
+            `refs/heads/${branch}`,
+            "--not",
+            "--remotes",
+          ],
+          dir,
+        ).trim(),
+      ),
+    }))
+    .filter((b) => b.ahead > 0);
+}
+
 function fmtPr(p: Pr): string {
   const s = p.state === "OPEN" && p.isDraft ? "DRAFT" : p.state;
   return `#${p.number} ${s}${p.mergedAt ? ` ${p.mergedAt.slice(5, 10)}` : ""}`;
@@ -271,7 +341,12 @@ function fmtPr(p: Pr): string {
 
 type Decision = Pick<Row, "target" | "safe" | "kind" | "evidence">;
 
-function decide(issue: Issue, prs: Pr[], branches: string[]): Decision {
+function decide(
+  issue: Issue,
+  prs: Pr[],
+  remote: string[],
+  local: LocalBranch[],
+): Decision {
   const strong = prs.filter((p) => p.match !== "body");
   const weak = prs.filter((p) => p.match === "body");
   const ev = strong.map(fmtPr).join(", ");
@@ -306,13 +381,25 @@ function decide(issue: Issue, prs: Pr[], branches: string[]): Decision {
   }
   const open = strong.filter((p) => p.state === "OPEN");
   const merged = strong.filter((p) => p.state === "MERGED");
-  if (merged.length && !open.length) return move(S.done, true);
+  if (merged.length && !open.length) {
+    const caveats = merged.filter((p) => p.unfinished);
+    if (!caveats.length) return move(S.done, true);
+    const quoted = caveats.map((p) => `#${p.number} says "${p.unfinished}"`);
+    return move(S.done, false, `${ev} — ${quoted.join(", ")}`);
+  }
   if (open.some((p) => !p.isDraft)) return move(S.inReview, true);
   if (open.length) return move(S.inProgress, true);
   if (strong.length)
     return flagged(`only closed-unmerged: ${ev} — superseded? cancel?`);
-  if (branches.some((b) => b.includes(issue.identifier.toLowerCase())))
+  if (remote.some((b) => mentions(b, issue.identifier)))
     return move(S.inProgress, false, "branch pushed, no PR");
+  const unpushed = local.find((b) => mentions(b.branch, issue.identifier));
+  if (unpushed)
+    return move(
+      S.inProgress,
+      false,
+      `${unpushed.ahead} unpushed commit(s) on ${unpushed.branch}, no PR`,
+    );
   if (weak.length)
     return flagged(`only mentioned in ${weak.map(fmtPr).join(", ")}`);
   if (issue.state.type === "started")
@@ -360,6 +447,47 @@ function finalize(issue: Issue, d: Decision): Omit<Row, "n"> {
   };
 }
 
+function openPrsOnOtherTickets(pool: GhPr[], issues: Issue[]): Omit<Row, "n">[] {
+  const keys = [
+    ...new Set(
+      issues.map((i) =>
+        i.identifier
+          .split("-")[0]
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, ""),
+      ),
+    ),
+  ].filter(Boolean);
+  if (!keys.length) return [];
+  const mine = new Set(issues.map((i) => i.identifier.toLowerCase()));
+  const re = new RegExp(
+    `(?:^|[^a-z0-9])((?:${keys.join("|")})-\\d+)(?![0-9])`,
+    "g",
+  );
+  const byId = new Map<string, { title: string; prs: number[] }>();
+  for (const p of pool.filter((p) => p.state === "OPEN")) {
+    for (const [, id] of `${p.title} ${p.headRefName}`
+      .toLowerCase()
+      .matchAll(re)) {
+      if (mine.has(id)) continue;
+      const entry = byId.get(id) ?? { title: p.title, prs: [] };
+      if (!entry.prs.includes(p.number)) entry.prs.push(p.number);
+      byId.set(id, entry);
+    }
+  }
+  return [...byId].map(([id, e]) => ({
+    issueId: "",
+    identifier: id.toUpperCase(),
+    title: e.title,
+    now: "—",
+    target: null,
+    stateId: null,
+    safe: false,
+    kind: "flag",
+    evidence: `your open ${e.prs.map((n) => `#${n}`).join(", ")} — not one of your open tickets`,
+  }));
+}
+
 function printTable(project: Project, rows: Row[]) {
   const trunc = (s: string, n: number) =>
     (s.length > n ? `${s.slice(0, n - 1)}…` : s).padEnd(n);
@@ -399,17 +527,27 @@ async function plan(args: string[]) {
   );
 
   const needs = issues.filter(
-    (i) => i.children === null && !hasStrongPr(evidence.get(i.identifier)!),
+    (i) =>
+      (i.isParent && i.children === null) ||
+      (i.attachments === null && !hasStrongPr(evidence.get(i.identifier)!)),
   );
   if (needs.length) {
     console.log(`NEEDS ${needs.map((i) => i.identifier).join(" ")}`);
     process.exit(3);
   }
 
-  const branches = remoteBranches(project.repos);
+  const remote = remoteBranches(project.repos);
+  const local = unpushedBranches(
+    project.dir,
+    issues.map((i) => i.identifier),
+  );
   const order = ["move", "flag", "noop"];
-  const rows = issues
-    .map((i) => finalize(i, decide(i, evidence.get(i.identifier)!, branches)))
+  const rows = [
+    ...issues.map((i) =>
+      finalize(i, decide(i, evidence.get(i.identifier)!, remote, local)),
+    ),
+    ...openPrsOnOtherTickets(pool, issues),
+  ]
     .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
     .map((r, idx) => ({ ...r, n: idx + 1 }));
   mkdirSync(PLAN_FILE.replace(/\/[^/]+$/, ""), { recursive: true });
@@ -425,18 +563,29 @@ async function plan(args: string[]) {
   printTable(project, rows);
 }
 
+function select(sel: string, moves: Row[]): Row[] {
+  if (sel === "safe") return moves.filter((r) => r.safe);
+  if (sel === "all") return moves;
+  const picked = new Set<number>();
+  for (const part of sel.split(",")) {
+    const m = part.trim().match(/^(\d+)(?:-(\d+))?$/);
+    if (!m)
+      throw new Error(`bad selection "${part}" — use safe, all, or e.g. 1-3,5`);
+    const [a, b] = [Number(m[1]), Number(m[2] ?? m[1])];
+    for (let n = Math.min(a, b); n <= Math.max(a, b); n++) picked.add(n);
+  }
+  return moves.filter((r) => picked.has(r.n));
+}
+
 async function apply(sel: string) {
   const { rows, mode } = (await Bun.file(PLAN_FILE).json()) as {
     rows: Row[];
     mode: "api" | "mcp";
   };
-  const moves = rows.filter((r) => r.kind === "move");
-  const picked =
-    sel === "safe"
-      ? moves.filter((r) => r.safe)
-      : sel === "all"
-        ? moves
-        : moves.filter((r) => sel.split(",").map(Number).includes(r.n));
+  const picked = select(
+    sel,
+    rows.filter((r) => r.kind === "move"),
+  );
   if (!picked.length) return console.log("Nothing selected.");
   if (mode === "mcp") {
     for (const r of picked)
@@ -446,11 +595,14 @@ async function apply(sel: string) {
   for (const r of picked) {
     try {
       const d: any = await gql(
-        `mutation($id: String!, $stateId: String!) { issueUpdate(id: $id, input: { stateId: $stateId }) { success } }`,
+        `mutation($id: String!, $stateId: String!) { issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { state { name } } } }`,
         { id: r.issueId, stateId: r.stateId },
       );
+      const landed = d.issueUpdate.issue?.state?.name;
       console.log(
-        `${d.issueUpdate.success ? "ok  " : "FAIL"} ${r.identifier} ${r.now} → ${r.target}`,
+        landed === r.target
+          ? `ok   ${r.identifier} ${r.now} → ${r.target}`
+          : `FAIL ${r.identifier} ${r.now} → ${r.target} (Linear says ${landed ?? "?"})`,
       );
     } catch (e) {
       console.log(`FAIL ${r.identifier}: ${(e as Error).message}`);
@@ -459,13 +611,16 @@ async function apply(sel: string) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-if (cmd === "project")
-  console.log(JSON.stringify(await resolveProject(flag(rest, "--project"))));
-else if (cmd === "plan") await plan(rest);
-else if (cmd === "apply" && rest[0]) await apply(rest[0]);
-else {
-  console.error(
-    "usage: linear-grooming.ts project [--project P] | plan [--project P] (--api | --issues F [--enrich E]) | apply <safe|all|1,3,5>",
-  );
+try {
+  if (cmd === "project")
+    console.log(JSON.stringify(await resolveProject(flag(rest, "--project"))));
+  else if (cmd === "plan") await plan(rest);
+  else if (cmd === "apply" && rest[0]) await apply(rest[0]);
+  else
+    throw new Error(
+      "usage: linear-grooming.ts project [--project P] | plan [--project P] (--api | --issues F [--enrich E]) | apply <safe|all|1-3,5>",
+    );
+} catch (e) {
+  console.error((e as Error).message);
   process.exit(1);
 }
