@@ -14,10 +14,9 @@
 #   marker   = the literal badge matched (or "" on fallback)
 # Used by: address-coderabbit (step 2), request-review (step 3b).
 #
-# Fail-safe: a body with no recognized marker → "unknown". Callers that
-# must not under-react (request-review) treat unknown-but-actionable as
-# major; callers that skip nits by default (address-coderabbit) treat
-# unknown as skip. That policy split stays in the skills, not here.
+# Fail-safe: a body with no recognized marker → "unknown". The token only
+# orders findings; no caller drops one on severity (every finding is
+# addressed, reversed 2026-09-25). Unknown-but-actionable orders as major.
 set -euo pipefail
 
 BODY="$(cat)"

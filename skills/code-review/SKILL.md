@@ -165,7 +165,7 @@ drop a lens.
 The tier name IS the triage rule: **must-fix** = blocking, fix before merge.
 **should-fix** = clear defect, not blocking (high confidence it's wrong), fix
 now. **consider** = judgement-call, lower confidence (reasonable people could
-defer) — code-fix fixes only the sensical ones. **nit** = trivial.
+defer) — code-fix fixes the sensical ones and defers the rest to the user. **nit** = trivial; code-fix fixes it.
 
 Tie-breaks, always round up: unsure must-fix/should-fix → must-fix;
 should-fix/consider → should-fix; consider/nit → consider.
@@ -278,7 +278,7 @@ merge_blocking:
   should_fix_count: 2
   failing_checks: 0
   plan_gaps: 1
-recommendation: fix must-fix + should-fix + sensical consider, defer rest, then ready-for-review
+recommendation: fix must-fix + should-fix + sensical consider + nit, defer rest to user, then ready-for-review
 ```
 
 The packet feeds `code-fix` directly — no re-discovery.

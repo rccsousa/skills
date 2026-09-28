@@ -168,7 +168,7 @@ These are never lifted, even with the risk-ack flag:
 | **verify¹ (early)** | evidence shown, user reads  | evidence shown, user reads                             | fail-fast gate — **HALT on broken runtime**   |
 | review (local)   | local draft review on branch  | local draft, user reads                                | local draft, pipes straight to fix            |
 | cascade gate     | pause for user ack            | `/grill-with-docs` on findings packet                  | no gate — pipe straight to fix                |
-| fix (local)      | must-fix+should-fix+sensical consider, user acks | per-finding approval                 | must-fix+should-fix+sensical consider committed |
+| fix (local)      | must-fix+should-fix+sensical consider+nit, user acks | per-finding approval                 | must-fix+should-fix+sensical consider+nit committed |
 | **simplify**     | findings surfaced before apply | findings surfaced before apply                        | applies unattended, skips noted               |
 | **verify² (final)** | evidence shown, user reads  | evidence shown, user reads                             | authoritative gate — **HALT on broken runtime** |
 | **ADR write**    | skipped (user owns ADRs)      | `/grill-with-docs` writes ADRs from final code         | `/grill-with-docs --auto` writes ADRs         |
@@ -502,7 +502,7 @@ should-fix + sensical consider, applies fixes, commits via `/create-commit`.
 committed locally".
 
 **Scope:** must-fix + should-fix always; consider only when sensical
-(judgement-call ones deferred). Nits skipped unless cheap. Out-of-scope findings →
+(judgement-call ones deferred to the user). Nits fixed. Out-of-scope findings →
 surface to user as suggested follow-up issues; never file issues unattended
 even in `auto` (hard cap).
 

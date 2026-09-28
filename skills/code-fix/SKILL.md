@@ -69,13 +69,14 @@ review and fix always agree on the diff source.
    + should-fix are mandatory — every item gets fixed. consider is judgement-call:
    fix the ones with a clear, low-risk fix (the "sensical" ones); defer the noisy
    / arguable ones (record under `deferred` in the return payload with a one-line
-   reason). Skip nits unless trivial (1-line / pure rename).
+   reason) — a proposal the user decides, not terminal. Nits get fixed; an
+   arguable nit is deferred the same way. Tier sets order, never inclusion.
    - **Sensical consider** = fix is obvious, in-scope, low-risk (e.g. extract a
      named const for a magic number, add missing docstring, finish an
      inconsistent rename). Just do it.
    - **Non-sensical consider** = fix needs a judgement call, would balloon the
      diff, or is arguable taste. Defer, don't guess.
-3. **Partition findings by file.** Each file becomes one partition; partitions are disjoint by construction. Nits attached to a partition's files ride along if trivial.
+3. **Partition findings by file.** Each file becomes one partition; partitions are disjoint by construction. Nits ride along with their file's partition.
 4. **Fan out fix workers in parallel** (default; serial if `--no-parallel`). One worker per partition, each in its own `isolation: "worktree"`. Default each worker to Sonnet; escalate hard partitions to Opus (see **Worker model** below). Mode `approve` falls back to serial (per-finding user input precludes parallelism). All workers dispatched in a single message.
    - Each worker:
      - Cd into its worktree (forked from head branch)

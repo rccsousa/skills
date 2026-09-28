@@ -1,6 +1,6 @@
 ---
 name: linear-grooming
-description: Groom your Linear tickets — walk every open issue assigned to you in a project, check its PRs on GitHub, and move it to the status the evidence supports (in progress / in review / done). Use when the user says "/linear-grooming", "groom my tickets", "sync Linear with my PRs", or "clean up my Linear board".
+description: Groom your Linear tickets — walk every open issue assigned to you (scoped by a local repo config, not a Linear project), check its PRs on GitHub, and move it to the status the evidence supports (in progress / in review / done). Use when the user says "/linear-grooming", "groom my tickets", "sync Linear with my PRs", or "clean up my Linear board".
 disable-model-invocation: true
 ---
 
@@ -12,7 +12,7 @@ First run on a machine: `bash <skill dir>/setup.sh` (user runs it — it's inter
 
 ## Args
 
-- `--project P` → name in `~/.config/linear-grooming/projects.json` (`{dir, repos, team, statuses}`) or a directory. Default: cwd's repo. Pass through to every `bun $G` call.
+- `--project P` → name in `~/.config/linear-grooming/projects.json` (`{dir, repos, team, statuses}`) or a directory. Default: cwd's repo. Pass through to every `bun $G` call. It is a local repo config, NOT a Linear project: never filter `list_issues` by Linear project; scope = assigned to you + the config's `team`.
 - `--api` → Linear GraphQL instead of MCP (needs key; exit 2 = no key → relay setup text, stop).
 - `apply` → unattended: apply `safe` rows without asking. Otherwise show table and wait.
 
@@ -41,7 +41,7 @@ bun $G apply <safe|all|1-3,5>     # mutates and checks the status each update re
 
 Evidence: your PRs whose title/branch contains the exact ID (`ENG-113` ≠ `ENG-1130`), PR links attached to the issue, pushed branches, and local branches in the project dir with commits on no remote.
 
-- Parent with open children → unchanged; all closed → done (ask).
+- Parent → done only when every sub-issue is Done/Canceled (ask); any open child → unchanged, open children listed under the table. Merged-PR issues always land in `NEEDS` so their children are fetched — `list_issues assignee: me` misses children assigned to others.
 - Merged PR, none open → done: `safe`, or `ask` when a merged PR's body reads unfinished ("NOT_RUN", "was not run", "unverified", "deferred", "next PR"…; the phrase is quoted in the row).
 - Open non-draft PR → in review; only drafts → in progress (safe).
 - Pushed branch or unpushed local commits, no PR → in progress (ask).

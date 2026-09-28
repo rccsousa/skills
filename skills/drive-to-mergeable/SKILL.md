@@ -32,30 +32,40 @@ If no PR exists, open one via `/create-pr` (concise WWH body, conventional title
 
 Request the external reviewer, then **hand the wait to `/mergeable-loop`** — the moment Copilot is requested, invoke `mergeable-loop` with this PR#. It schedules the 3-min watch cron that polls for the bot review + CI, runs steps 4-6 inline on each real change, and self-deletes on merge-ready. You do not block-poll here; the loop owns the wait. (Overnight wait / closing the terminal → route to `/schedule` instead — session cron won't survive.)
 
-Request + poll is scripted — `scripts/request-and-poll-bot.sh <owner/repo> <n> <copilot|coderabbit> [timeout]`. It POSTs the Copilot request (CodeRabbit auto-reviews, no request), polls `gh pr view --json reviews` until the bot review lands or times out, and emits `{bot, reviews, comments}` JSON. Reason over that output; the loop calls the same script. Triage CodeRabbit's Critical/Major findings through step 4 like any other source.
+Request + poll is scripted — `scripts/request-and-poll-bot.sh <owner/repo> <n> <copilot|coderabbit> [timeout]`. It POSTs the Copilot request (CodeRabbit auto-reviews, no request), polls `gh pr view --json reviews` until the bot review lands or times out, and emits `{bot, reviews, comments}` JSON. Reason over that output; the loop calls the same script. Triage every CodeRabbit finding — inline threads and review bodies ("Outside diff range", nitpick sections) — through step 4 like any other source.
 
 Apply `superpowers:receiving-code-review` to the bot's comments too.
 
 ### 4. Triage gate (the net-new step)
-Sort EVERY finding (both sources) into exactly one bucket:
+Sort EVERY finding (both sources, every severity) into exactly one bucket. Severity sets order only. Terminal = fixed, declined with a reply the user saw as a draft, or deferred by the user explicitly.
 
 | Bucket | Action |
 |---|---|
 | **in-scope fix** | the bug lives in *this* diff / this PR's surface → fix here (step 5) |
-| **out-of-scope / pre-existing** | real, but predates the branch or belongs to another concern → `gh issue create` with file:line + repro, reply on the thread deferring to the issue. **Do NOT expand the PR** — keep it focused. |
-| **wontfix** | reviewer is wrong → reply with the code/test that refutes it |
+| **out-of-scope / pre-existing** | real, but predates the branch or belongs to another concern → propose deferral; on the user's OK, `gh issue create` with file:line + repro and reply deferring to the issue. **Do NOT expand the PR** — keep it focused. |
+| **wontfix** | reviewer is wrong → draft a reply with the code/test that refutes it; verify its claims; the user sees the draft before it posts |
 
-Normalize CodeRabbit severities with the shared classifier — `echo "$body" | scripts/classify-coderabbit-severity.sh` → `{severity, marker}` — instead of eyeballing badges; a critical/major routes to in-scope-fix, nit/refactor defaults to file-issue or wontfix.
+Normalize CodeRabbit severities with the shared classifier — `echo "$body" | scripts/classify-coderabbit-severity.sh` → `{severity, marker}` — instead of eyeballing badges; severity sets fix order only; the bucket follows scope and validity, not severity.
 
 The in/out split is the whole point: a widened-scope fix that drags in a pre-existing race (TOCTOU, etc.) is exactly the scope-creep failure mode. Default a pre-existing finding to **file-issue**, not patch-on-top.
 
 ### 5. Autofix in-scope
-For each in-scope finding: fix + add a **regression test** that fails before / passes after. Then verify — see guardrails. Commit (conventional, no co-author) on approval; push.
+For each in-scope finding: fix + add a **regression test** (behavioural findings) that fails before / passes after. Then verify — see guardrails. Commit (conventional, no co-author) on approval; push.
 
 ### 6. Resolve + gate
-- Reply on threads first, then **resolve** them with `scripts/resolve-pr-threads.sh <owner/repo> <n>` (fetches unresolved threads via the `reviewThreads` GraphQL connection, fires `resolveReviewThread` per thread; `--dry-run` to preview). Works the same for Copilot and CodeRabbit.
-- Run `pr-ready` for the mergeability report.
+- Before any push, reply or resolve: re-check `gh pr view <n> --json state,headRefOid` — PR still `OPEN`, head unmoved except by your own push — else stop.
+- Reply on threads first, then **resolve** them with `scripts/resolve-pr-threads.sh <owner/repo> <n>` (fetches unresolved threads via the `reviewThreads` GraphQL connection, fires `resolveReviewThread` per thread; `--dry-run` to preview). Works the same for Copilot and CodeRabbit. It resolves every unresolved thread, so run it only once every thread's finding is terminal.
+- Run `pr-ready` for the mergeability report; it must pass the exit criteria below.
 - **Stop.** Ping the human for final manual review. Never `gh pr merge` (route through `/merge-pr`).
+
+## Exit criteria
+
+Mergeable only when all hold; otherwise report which one fails:
+- every finding is terminal — inline threads AND review bodies (CodeRabbit "Outside diff range" / nitpick sections have no thread, so `isResolved` never shows them);
+- a review that lands mid-task (e.g. during a side task) was re-fetched in full, body included — not only the comment IDs a notification names;
+- checks green, `mergeStateStatus` CLEAN, 0 unresolved threads;
+- a CodeRabbit review exists on the current head SHA (`gh api repos/<o>/<r>/pulls/<n>/reviews --jq '.[]|select(.user.login=="coderabbitai[bot]")|.commit_id'`);
+- no decline / "accepted limitation" reply was auto-posted. Under an unattended caller (`/land`), a pending draft = blocked.
 
 ## Guardrails (hard-won)
 

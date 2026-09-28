@@ -2,7 +2,7 @@
 // linear-grooming.ts project [--project P]                         → print resolved {name,dir,repos,team}
 // linear-grooming.ts plan [--project P] [--api | --issues F [--enrich E]]
 //   --api: fetch from Linear GraphQL. --issues: MCP list_issues output (array or pages of {issues}).
-//   MCP mode exits 3 + prints `NEEDS <ids>` when parents or no-PR issues need children/attachments (--enrich).
+//   MCP mode exits 3 + prints `NEEDS <ids>` when parents, merged-PR (done-candidate) or no-PR issues need children/attachments (--enrich).
 // linear-grooming.ts apply <safe|all|1-3,5>                         → api plan: mutate + verify; mcp plan: print {id,state} lines
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -371,8 +371,11 @@ function decide(
 
   const children = issue.children ?? [];
   if (children.length) {
-    const open = children.filter((c) => !TERMINAL.has(c.state.type)).length;
-    if (open) return noop(`parent: ${open}/${children.length} children open`);
+    const open = children.filter((c) => !TERMINAL.has(c.state.type));
+    if (open.length)
+      return noop(
+        `parent: ${open.length}/${children.length} children open: ${open.map((c) => `${c.identifier} (${c.state.name})`).join(", ")}`,
+      );
     return move(
       S.done,
       false,
@@ -508,6 +511,8 @@ function printTable(project: Project, rows: Row[]) {
     console.log(
       `\n${noops.length} unchanged: ${noops.map((r) => r.identifier).join(" ")}`,
     );
+  for (const r of noops.filter((r) => r.evidence.startsWith("parent:")))
+    console.log(`  ${r.identifier}  ${r.evidence}`);
 }
 
 async function plan(args: string[]) {
@@ -529,6 +534,9 @@ async function plan(args: string[]) {
   const needs = issues.filter(
     (i) =>
       (i.isParent && i.children === null) ||
+      // list_issues(assignee: me) misses children assigned to others; a done candidate must have its children checked.
+      (i.children === null &&
+        evidence.get(i.identifier)!.some((p) => p.match !== "body" && p.state === "MERGED")) ||
       (i.attachments === null && !hasStrongPr(evidence.get(i.identifier)!)),
   );
   if (needs.length) {
