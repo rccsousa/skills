@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${PLUGIN_ROOT}/hooks/env-file-guard.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking environment-file access"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -39,6 +39,47 @@ plugins: rccsousa-skills
 **Dependencies:** `gh` (GitHub CLI), `jq`. `install-maintainer` additionally
 needs `python3`.
 
+## Codex environment-file guard
+
+The Codex plugin is separate from the Claude skills marketplace above. Install
+it through Codex, not the `skills` CLI:
+
+```bash
+codex plugin marketplace add rccsousa/skills
+codex plugin add env-guard@rccsousa-codex
+```
+
+For the initial branch test, replace the first command with:
+
+```bash
+codex plugin marketplace add rccsousa/skills --ref rs/vendor-env-guard
+```
+
+Start a new Codex CLI session and use `/hooks` to review and trust the guard.
+Restart Codex desktop before testing there. Installing the plugin does not
+trust its hooks automatically. Required tools: POSIX `sh`, `jq`, `grep`, `sed`.
+
+The package at `plugins/env-guard/` vendors the existing Codex guard, registers
+it for every `PreToolUse` event, and resolves the script through `PLUGIN_ROOT`.
+It blocks tool payloads mentioning `.env`, `.env.*`, or `.envrc`, except the
+exact `.env.example` token. For direct `apply_patch` calls, it checks file-path
+headers so patch contents may mention environment-file names. Wrapped patch
+calls are scanned as ordinary tool payloads and may be blocked by those mentions.
+Without `jq`, it conservatively blocks any payload mentioning `.env`, including
+`.env.example`.
+
+This is a text-matching guard, not filesystem isolation: it can reject harmless
+mentions and cannot detect every dynamically constructed path. It does not
+replace sandbox permissions. Test blocking with synthetic hook payloads or
+nonexistent paths; never use real credentials as fixtures.
+
+An existing user-level guard remains active alongside this plugin. Keep that
+protection until you have verified the plugin is loaded and trusted; otherwise
+you may see duplicate checks. `install.sh` still installs only Claude skills.
+
+See [Codex hook setup](https://learn.chatgpt.com/docs/hooks) and
+[plugin packaging](https://developers.openai.com/plugins/build/plugins).
+
 ## Skills
 
 | Skill | What it does |

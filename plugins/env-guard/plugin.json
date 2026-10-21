@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "env-guard",
+  "version": "0.1.0",
+  "description": "Block tool calls mentioning credential-bearing environment files; permit .env.example.",
+  "author": { "name": "rccsousa" },
+  "repository": "https://github.com/rccsousa/skills",
+  "license": "MIT",
+  "extensions": {
+    "com.openai": { "hooks": "./hooks/hooks.json" }
+  }
+}
