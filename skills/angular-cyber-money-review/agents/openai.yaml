@@ -1,0 +1,4 @@
+interface:
+  display_name: "Angular Cyber Money Review"
+  short_description: "Blind dual review of money and cyber risk"
+  default_prompt: "Use $angular-cyber-money-review to run a blind dual review of this PR for money-movement and cyber defects."

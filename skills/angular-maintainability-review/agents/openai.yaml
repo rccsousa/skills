@@ -1,0 +1,4 @@
+interface:
+  display_name: "Angular Maintainability Review"
+  short_description: "Two blind readability reviews, one distilled result"
+  default_prompt: "Use $angular-maintainability-review to run independent host and counterpart maintainability reviews of this change, then converge on actionable comments."

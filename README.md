@@ -89,6 +89,46 @@ Standalone:
 |-------|--------------|
 | `linear-grooming` | Reconcile the Linear issues assigned to you with GitHub PR state — merged → done, open → in review, draft → in progress — and flag stale or ambiguous tickets. Uses the Linear MCP by default or the Linear API with a key; `bin/linear-grooming` runs it on a loop. Needs `bun`. Run `setup.sh` once to set project, repos, team and status names. |
 
+## Diagrams and focused reviews
+
+| Skill | What it does |
+|-------|--------------|
+| `surgical-review` | Single-host review of an exact PR, branch, or range for concrete regressions. No counterpart or automatic posting. Bundles optional deterministic race checks. |
+| `mermaid-diagram` | Ground a diagram in code or a proposal, render it, and deliver copyable Mermaid source. Highlight proposed changes in yellow. Requires Node/npm and a Chromium installation compatible with Mermaid CLI. |
+| `angular-cyber-money-review` | Two blind reviews of the same immutable target, host plus counterpart model, focused on money movement and cyber trust boundaries. Reconcile and verify findings; no automatic posting or fixes. |
+| `angular-maintainability-review` | Two blind reviews focused on concrete inspection and maintenance costs, then one distilled report of behavior-preserving recommendations. Suggestions remain non-blocking by default. |
+
+Here, “angular” means two independent model perspectives, not the Angular web framework.
+Both angular review skills work from Claude Code or Codex and require access to the other
+runner: Claude Opus 5.5 from Codex, or Codex `gpt-6.1-sol` from Claude. Authenticate
+those CLIs locally. If the required counterpart is unavailable, the skill reports
+an incomplete review rather than silently substituting a model.
+
+Each review skill bundles its required rubric; the cyber flavor also includes the
+single-target angular method and an optional deterministic race-check helper.
+They do not require sibling skill installations, AoE, global hooks, or local
+machine paths. The existing `install.sh` installs into Claude Code; for Codex,
+copy or link the desired skill directory into `~/.codex/skills/`.
+
+## Adversarial review agent
+
+`agents/claude/adversarial-reviewer.md` and
+`agents/codex/adversarial-reviewer.toml` provide native versions of the same
+review agent. It reviews a finished, uncommitted change, runs the repository's
+checks, attacks correctness, test quality, scope, provider contracts, and
+security, then returns a JSON approve/request-changes verdict. It does not edit
+code. It requires shell access for checks; review it as you would any test runner.
+
+For Claude Code, copy the Markdown file to
+`~/.claude/agents/adversarial-reviewer.md`. Its `model: opus` uses your runner's
+Opus alias. These agent files are separate from skills and are not installed by
+`install.sh` or `npx skills add`.
+
+For Codex, copy the TOML file to
+`~/.codex/agents/adversarial-reviewer.toml` and register the role in your Codex
+configuration using the supported custom-agent configuration for your version.
+The TOML leaves model choice to the host configuration.
+
 ## Standards come from your repo
 
 None of these skills carry an opinion about how your code should be shaped.

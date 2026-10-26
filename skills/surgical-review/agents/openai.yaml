@@ -1,0 +1,4 @@
+interface:
+  display_name: "Surgical Review"
+  short_description: "Focused single-pass PR review"
+  default_prompt: "Use $surgical-review to inspect this PR for concrete regressions."
