@@ -95,16 +95,17 @@ Standalone:
 |-------|--------------|
 | `surgical-review` | Single-host review of an exact PR, branch, or range for concrete regressions. No counterpart or automatic posting. Bundles optional deterministic race checks. |
 | `mermaid-diagram` | Ground a diagram in code or a proposal, render it, and deliver copyable Mermaid source. Highlight proposed changes in yellow. Requires Node/npm and a Chromium installation compatible with Mermaid CLI. |
+| `angular-stack-review` | Two blind whole-stack reviews covering cross-PR contracts, supported intermediate states, and fix ownership. Freeze membership and SHAs, then reconcile once. |
 | `angular-cyber-money-review` | Two blind reviews of the same immutable target, host plus counterpart model, focused on money movement and cyber trust boundaries. Reconcile and verify findings; no automatic posting or fixes. |
 | `angular-maintainability-review` | Two blind reviews focused on concrete inspection and maintenance costs, then one distilled report of behavior-preserving recommendations. Suggestions remain non-blocking by default. |
 
 Here, “angular” means two independent model perspectives, not the Angular web framework.
-Both angular review skills work from Claude Code or Codex and require access to the other
+The angular review skills work from Claude Code or Codex and require access to the other
 runner: Claude Opus 5.5 from Codex, or Codex `gpt-6.1-sol` from Claude. Authenticate
 those CLIs locally. If the required counterpart is unavailable, the skill reports
 an incomplete review rather than silently substituting a model.
 
-Each review skill bundles its required rubric; the cyber flavor also includes the
+The stack skill is self-contained. The other review skills bundle their required rubrics; the cyber flavor also includes the
 single-target angular method and an optional deterministic race-check helper.
 They do not require sibling skill installations, AoE, global hooks, or local
 machine paths. The existing `install.sh` installs into Claude Code; for Codex,
